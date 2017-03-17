@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	QEMU_SYSTEM_EXE = "qemu-system-x86_64"
+	QEMU_SYSTEM_EXE = "qemu-system-x86_64uvm"
 )
 
 func (qc *QemuContext) arguments(ctx *hypervisor.VmContext) []string {
@@ -27,23 +27,25 @@ func (qc *QemuContext) arguments(ctx *hypervisor.VmContext) []string {
 	qc.cpus = boot.CPU
 
 	var machineClass, memParams, cpuParams string
-	machineClass = "pc-i440fx-2.1"
+	machineClass = "pc-uvm"
 	memParams = fmt.Sprintf("size=%d,slots=1,maxmem=%dM", boot.Memory, hypervisor.DefaultMaxMem) // TODO set maxmem to the total memory of the system
 	cpuParams = fmt.Sprintf("cpus=%d,maxcpus=%d", boot.CPU, hypervisor.DefaultMaxCpus)           // TODO set it to the cpus of the system
 
 	cmdline := "console=ttyS0 panic=1 no_timer_check"
 	params := []string{
-		"-machine", machineClass + ",accel=kvm,usb=off", "-global", "kvm-pit.lost_tick_policy=discard", "-cpu", "host"}
+		"-machine", machineClass, "-enable-kvm", "-cpu", "host"}
 	if _, err := os.Stat("/dev/kvm"); os.IsNotExist(err) {
-		glog.V(1).Info("kvm not exist change to no kvm mode")
+		glog.V(3).Info("kvm not exist change to no kvm mode")
 		params = []string{"-machine", machineClass + ",usb=off", "-cpu", "core2duo"}
 		cmdline += " clocksource=acpi_pm notsc"
 	}
 
 	if boot.Bios != "" && boot.Cbfs != "" {
 		params = append(params,
-			"-drive", fmt.Sprintf("if=pflash,file=%s,readonly=on", boot.Bios),
-			"-drive", fmt.Sprintf("if=pflash,file=%s,readonly=on", boot.Cbfs))
+			"-drive", fmt.Sprintf("if=pflash,file=%s,readonly=on,id=qboot_rom", boot.Bios),
+			"-drive", fmt.Sprintf("if=pflash,file=%s,readonly=on,append-offset=4152,id=kernel_rom", boot.Cbfs),
+			"-append", fmt.Sprintf("console=ttyS0 panic=1 quiet no_timer_check nr_cpus=%d", ctx.Boot.CPU))
+		glog.V(3).Infof("Boot qemu with bios and cbfs file: %q and %q", boot.Bios, boot.Cbfs)
 	} else if boot.Bios != "" {
 		params = append(params,
 			"-bios", boot.Bios,
