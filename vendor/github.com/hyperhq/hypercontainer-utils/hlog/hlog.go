@@ -1,8 +1,9 @@
 package hlog
 
 import (
-	"fmt"
+	//"fmt"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/golang/glog"
 )
 
@@ -25,20 +26,32 @@ func Log(level LogLevel, args ...interface{}) {
 }
 
 func HLog(level LogLevel, owner interface{}, depth int, args ...interface{}) {
-	l := getLogger(level)
-	if l == nil {
-		return
+	logrusFuncs := [](func(string, ...interface{})){
+		logrus.Debugf, logrus.Debugf, logrus.Debugf, logrus.Infof, logrus.Warnf, logrus.Errorf,
 	}
-	prefix := getPrefix(owner)
-	if len(args) > 1 {
-		format, ok := args[0].(string)
-		if ok {
-			format = fmt.Sprintf(format, args[1:]...)
-			l(depth+1, prefix, format)
-			return
-		}
+	argv1, ok := args[0].(string)
+	argv2 := args[1:]
+
+	if !ok {
+		argv1 = "%v"
+		argv2 = args[0:]
 	}
-	l(depth+1, append([]interface{}{prefix}, args...)...)
+	logrusFuncs[level](argv1, argv2...)
+
+	//	l := getLogger(level)
+	//	if l == nil {
+	//		return
+	//	}
+	//	prefix := getPrefix(owner)
+	//	if len(args) > 1 {
+	//		format, ok := args[0].(string)
+	//		if ok {
+	//			format = fmt.Sprintf(format, args[1:]...)
+	//			l(depth+1, prefix, format)
+	//			return
+	//		}
+	//	}
+	//	l(depth+1, append([]interface{}{prefix}, args...)...)
 }
 
 func IsLogLevel(level LogLevel) bool {
