@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hyperstart/libhyperstart"
 	"github.com/hyperhq/runv/hyperstart/proxy"
 	"github.com/hyperhq/runv/hypervisor"
@@ -64,46 +64,46 @@ var proxyCommand = cli.Command{
 			context.String("hyperstart-stream-sock") == "" || context.String("proxy-hyperstart") == "" {
 			return err
 		}
-		glog.Infof("libhyperstart.NewJsonBasedHyperstart")
+		logrus.Infof("libhyperstart.NewJsonBasedHyperstart")
 		h, _ := libhyperstart.NewJsonBasedHyperstart(context.String("vmid"), context.String("hyperstart-ctl-sock"), context.String("hyperstart-stream-sock"), 1, false, false)
 
 		var s *grpc.Server
 		if context.Bool("watch-hyperstart") {
-			glog.Infof("watchHyperstart")
+			logrus.Infof("watchHyperstart")
 			go func() {
 				watchHyperstart(h)
 				s.Stop()
 			}()
 		}
 		if context.String("watch-vm-console") != "" {
-			glog.Infof("watchConsole() sock: %s", context.String("watch-vm-console"))
+			logrus.Infof("watchConsole() sock: %s", context.String("watch-vm-console"))
 			err = watchConsole(context.String("watch-vm-console"))
 			if err != nil {
-				glog.Errorf("watchConsole() failed, err: %#v", err)
+				logrus.Errorf("watchConsole() failed, err: %#v", err)
 				return err
 			}
 		}
 
 		grpcSock := context.String("proxy-hyperstart")
-		glog.Infof("proxy.StartServer")
+		logrus.Infof("proxy.StartServer")
 		s, err = proxy.StartServer(grpcSock, h)
 		if err != nil {
-			glog.Errorf("proxy.StartServer() failed with err: %#v", err)
+			logrus.Errorf("proxy.StartServer() failed with err: %#v", err)
 			return err
 		}
 		if _, err := os.Stat(grpcSock); !os.IsNotExist(err) {
 			return fmt.Errorf("%s existed, someone may be in service", grpcSock)
 		}
-		glog.Infof("net.Listen() to grpcsock: %s", grpcSock)
+		logrus.Infof("net.Listen() to grpcsock: %s", grpcSock)
 		l, err := net.Listen("unix", grpcSock)
 		if err != nil {
-			glog.Errorf("net.Listen() failed with err: %#v", err)
+			logrus.Errorf("net.Listen() failed with err: %#v", err)
 			return err
 		}
 
-		glog.Infof("proxy: grpc api on %s", grpcSock)
+		logrus.Infof("proxy: grpc api on %s", grpcSock)
 		if err = s.Serve(l); err != nil {
-			glog.Errorf("proxy serve grpc with error: %v", err)
+			logrus.Errorf("proxy serve grpc with error: %v", err)
 		}
 
 		return err
@@ -128,11 +128,11 @@ func watchConsole(console string) error {
 				break
 			}
 			if err != nil {
-				glog.Errorf("read console %s failed: %v", console, err)
+				logrus.Errorf("read console %s failed: %v", console, err)
 				return
 			}
 			if len(log) != 0 {
-				glog.Info("vmconsole: ", string(log))
+				logrus.Info("vmconsole: ", string(log))
 			}
 		}
 	}()
@@ -143,18 +143,18 @@ func watchConsole(console string) error {
 func watchHyperstart(h libhyperstart.Hyperstart) error {
 	next := time.NewTimer(10 * time.Second)
 	timeout := time.AfterFunc(60*time.Second, func() {
-		glog.Errorf("watch hyperstart timeout")
+		logrus.Errorf("watch hyperstart timeout")
 		h.Close()
 	})
 	defer next.Stop()
 	defer timeout.Stop()
 
 	for {
-		glog.V(2).Infof("issue VERSION request for keep-alive test")
+		logrus.Debugf("issue VERSION request for keep-alive test")
 		_, err := h.APIVersion()
 		if err != nil {
 			h.Close()
-			glog.Errorf("h.APIVersion() failed with %#v", err)
+			logrus.Errorf("h.APIVersion() failed with %#v", err)
 			return err
 		}
 		if !timeout.Stop() {
@@ -195,13 +195,13 @@ func createProxy(context *cli.Context, VMID, ctlSock, streamSock, grpcSock strin
 		},
 	}
 
-	glog.V(2).Infof("start proxy with argument: %v", args)
+	logrus.Debugf("start proxy with argument: %v", args)
 	err = cmd.Start()
 	if err != nil {
-		glog.Errorf("createProxy failed with err %#v", err)
+		logrus.Errorf("createProxy failed with err %#v", err)
 		return err
 	}
-	glog.V(2).Infof("createProxy succeeded with proxy pid: %d", cmd.Process.Pid)
+	logrus.Debugf("createProxy succeeded with proxy pid: %d", cmd.Process.Pid)
 
 	return nil
 }

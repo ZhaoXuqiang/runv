@@ -10,7 +10,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	_ "github.com/hyperhq/runv/cli/nsenter"
 	"github.com/hyperhq/runv/hyperstart/libhyperstart"
 	"github.com/hyperhq/runv/lib/term"
@@ -70,7 +70,7 @@ var shimCommand = cli.Command{
 		}
 
 		if context.Bool("proxy-winsize") {
-			glog.V(3).Infof("using shim to proxy winsize")
+			logrus.Debugf("using shim to proxy winsize")
 			s, err := term.SetRawTerminal(os.Stdin.Fd())
 			if err != nil {
 				return cli.NewExitError(fmt.Sprintf("failed to set raw terminal: %v", err), -1)
@@ -80,7 +80,8 @@ var shimCommand = cli.Command{
 		}
 
 		if context.Bool("proxy-signal") {
-			glog.V(3).Infof("using shim to proxy signal")
+			// TODO
+			logrus.Debugf("using shim to proxy signal")
 			sigc := forwardAllSignals(h, container, process)
 			defer signal.Stop(sigc)
 		}
@@ -88,7 +89,7 @@ var shimCommand = cli.Command{
 		// wait until exit
 		exitcode := h.WaitProcess(container, process)
 		if context.Bool("proxy-exit-code") {
-			glog.V(3).Infof("using shim to proxy exit code: %d", exitcode)
+			logrus.Debugf("using shim to proxy exit code: %d", exitcode)
 			if exitcode != 0 {
 				cli.NewExitError("process returns non zero exit code", exitcode)
 			}
@@ -107,18 +108,18 @@ func proxyStdio(h libhyperstart.Hyperstart, container, process string, wg *sync.
 	go func() {
 		_, err1 := io.Copy(inPipe, os.Stdin)
 		err2 := h.CloseStdin(container, process)
-		glog.V(3).Infof("copy stdin %#v %#v", err1, err2)
+		logrus.Debugf("copy stdin %#v %#v", err1, err2)
 	}()
 
 	go func() {
 		_, err := io.Copy(os.Stdout, outPipe)
-		glog.V(3).Infof("copy stdout %#v", err)
+		logrus.Debugf("copy stdout %#v", err)
 		wg.Done()
 	}()
 
 	go func() {
 		_, err := io.Copy(os.Stderr, errPipe)
-		glog.V(3).Infof("copy stderr %#v", err)
+		logrus.Debugf("copy stderr %#v", err)
 		wg.Done()
 	}()
 }
@@ -140,13 +141,13 @@ func forwardAllSignals(h libhyperstart.Hyperstart, container, process string) ch
 			if !ok {
 				err := fmt.Errorf("can't forward unknown signal %q", s.String())
 				fmt.Fprintf(os.Stderr, "%v", err)
-				glog.Errorf("%v", err)
+				logrus.Errorf("%v", err)
 				continue
 			}
 			if err := h.SignalProcess(container, process, sysSig); err != nil {
 				err = fmt.Errorf("forward signal %q failed: %v", s.String(), err)
 				fmt.Fprintf(os.Stderr, "%v", err)
-				glog.Errorf("%v", err)
+				logrus.Errorf("%v", err)
 			}
 		}
 	}()

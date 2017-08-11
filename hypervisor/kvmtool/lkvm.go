@@ -16,7 +16,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hyperstart/api/json"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/hypervisor/network"
@@ -245,10 +245,10 @@ func (kc *KvmtoolContext) Launch(ctx *hypervisor.VmContext) {
 					for true {
 						nr, err := ptmx.Read(data)
 						if nr > 0 {
-							glog.Infof("lkvm output: %v", string(data[:nr]))
+							logrus.Infof("lkvm output: %v", string(data[:nr]))
 						}
 						if err != nil {
-							glog.Infof("read lkvm output failed: %v", err)
+							logrus.Infof("read lkvm output failed: %v", err)
 							break
 						}
 					}
@@ -269,24 +269,24 @@ func sock2pty(ls net.Listener, ptypath string, input bool) {
 
 	conn, err := ls.Accept()
 	if err != nil {
-		glog.Errorf("fail to accept client %v", err)
+		logrus.Errorf("fail to accept client %v", err)
 		return
 	}
 	defer func() {
 		conn.Close()
-		glog.Infof("close socket to pty")
+		logrus.Infof("close socket to pty")
 	}()
 
 	pty, err := os.OpenFile(ptypath, os.O_RDWR|syscall.O_NOCTTY, 0600)
 	if err != nil {
-		glog.Errorf("fail to open %v, %v", ptypath, err)
+		logrus.Errorf("fail to open %v, %v", ptypath, err)
 		return
 	}
 	defer pty.Close()
 
 	_, err = term.SetRawTerminal(pty.Fd())
 	if err != nil {
-		glog.Errorf("fail to setrowmode for %v: %v", ptypath, err)
+		logrus.Errorf("fail to setrowmode for %v: %v", ptypath, err)
 		return
 	}
 
@@ -308,27 +308,27 @@ func sock2pty(ls net.Listener, ptypath string, input bool) {
 
 				nw, ew := dst.Write(newbuf[:nr])
 				if ew != nil {
-					glog.Infof("write failed: %v", ew)
+					logrus.Infof("write failed: %v", ew)
 					break
 				}
 				if nr != nw {
-					glog.Infof("write != read")
+					logrus.Infof("write != read")
 					break
 				}
 				continue
 			}
 			if er == io.EOF {
-				glog.Infof("read end of file")
+				logrus.Infof("read end of file")
 				break
 			}
 			if er != nil {
-				glog.Infof("read failed: %v", er)
+				logrus.Infof("read failed: %v", er)
 				break
 			}
 		}
 
 		wg.Done()
-		glog.Infof("REACH the END of io copy")
+		logrus.Infof("REACH the END of io copy")
 	}
 
 	wg.Add(1)

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/api"
 	"github.com/hyperhq/runv/hypervisor/network"
 )
@@ -24,7 +24,7 @@ func (vd *VBoxDriver) InitNetwork(bIface, bIP string, disableIptables bool) erro
 
 	bip, ipnet, err := net.ParseCIDR(network.BridgeIP)
 	if err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		return err
 	}
 
@@ -32,27 +32,27 @@ func (vd *VBoxDriver) InitNetwork(bIface, bIP string, disableIptables bool) erro
 	inc(gateway, 2)
 
 	if !ipnet.Contains(gateway) {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		return fmt.Errorf("get Gateway from BridgeIP %s failed", network.BridgeIP)
 	}
 	prefixSize, _ := ipnet.Mask.Size()
 	_, network.BridgeIPv4Net, err = net.ParseCIDR(gateway.String() + fmt.Sprintf("/%d", prefixSize))
 	if err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		return err
 	}
 	network.BridgeIPv4Net.IP = gateway
-	glog.Warningf(network.BridgeIPv4Net.String())
+	logrus.Warnf(network.BridgeIPv4Net.String())
 	/*
 	 * Filter the IPs which can not be used for VMs
 	 */
 	bip = bip.Mask(ipnet.Mask)
 	for inc(bip, 1); ipnet.Contains(bip) && i < 2; inc(bip, 1) {
 		i++
-		glog.V(3).Infof("Try %s", bip.String())
+		logrus.Debugf("Try %s", bip.String())
 		_, err = network.IpAllocator.RequestIP(network.BridgeIPv4Net, bip)
 		if err != nil {
-			glog.Errorf(err.Error())
+			logrus.Errorf(err.Error())
 			return err
 		}
 	}
@@ -63,7 +63,7 @@ func (vd *VBoxDriver) InitNetwork(bIface, bIP string, disableIptables bool) erro
 func (vc *VBoxContext) ConfigureNetwork(config *api.InterfaceDescription) (*network.Settings, error) {
 	ip, ipnet, err := net.ParseCIDR(config.Ip)
 	if err != nil {
-		glog.Errorf("Parse interface IP failed %s", err)
+		logrus.Errorf("Parse interface IP failed %s", err)
 		return nil, err
 	}
 

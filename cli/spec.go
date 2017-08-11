@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli"
 )
@@ -136,12 +136,12 @@ func saveStateFile(root, container string, state *State) error {
 	stateFile := filepath.Join(root, container, stateJSON)
 	stateData, err := json.MarshalIndent(state, "", "\t")
 	if err != nil {
-		glog.V(1).Infof("%s\n", err.Error())
+		logrus.Infof("%s\n", err.Error())
 		return err
 	}
 	err = ioutil.WriteFile(stateFile, stateData, 0644)
 	if err != nil {
-		glog.V(1).Infof("%s\n", err.Error())
+		logrus.Infof("%s\n", err.Error())
 		return err
 	}
 	return nil

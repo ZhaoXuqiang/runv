@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/hypervisor/kvmtool"
 	"github.com/hyperhq/runv/hypervisor/libvirt"
@@ -26,7 +26,7 @@ func Probe(driver string) (hd hypervisor.HypervisorDriver, err error) {
 	case "libvirt":
 		ld := libvirt.InitDriver()
 		if ld != nil {
-			glog.V(1).Infof("Driver %q loaded", driver)
+			logrus.Infof("Driver %q loaded", driver)
 			return ld, nil
 		}
 	case "kvm", "qemu-kvm":
@@ -35,13 +35,13 @@ func Probe(driver string) (hd hypervisor.HypervisorDriver, err error) {
 		}
 		qd := qemu.InitDriver()
 		if qd != nil {
-			glog.V(1).Infof("Driver %q loaded", driver)
+			logrus.Infof("Driver %q loaded", driver)
 			return qd, nil
 		}
 	case "xen", "":
 		xd := xen.InitDriver()
 		if xd != nil {
-			glog.V(1).Infof("Driver \"xen\" loaded")
+			logrus.Infof("Driver \"xen\" loaded")
 			return xd, nil
 		}
 		if driver == "xen" {
@@ -51,13 +51,13 @@ func Probe(driver string) (hd hypervisor.HypervisorDriver, err error) {
 	case "qemu": // "qemu" or "", kvm will be enabled if the system enables kvm
 		qd := qemu.InitDriver()
 		if qd != nil {
-			glog.V(1).Infof("Driver \"qemu\" loaded")
+			logrus.Infof("Driver \"qemu\" loaded")
 			return qd, nil
 		}
 	case "kvmtool":
 		kd := kvmtool.InitDriver()
 		if kd != nil {
-			glog.V(1).Infof("Driver \"kvmtool\" loaded")
+			logrus.Infof("Driver \"kvmtool\" loaded")
 			return kd, nil
 		}
 	}

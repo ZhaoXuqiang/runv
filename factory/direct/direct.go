@@ -1,7 +1,7 @@
 package direct
 
 import (
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/factory/base"
 	"github.com/hyperhq/runv/hypervisor"
 )
@@ -20,7 +20,7 @@ func (d *directFactory) Config() *hypervisor.BootConfig {
 }
 
 func (d *directFactory) GetBaseVm() (*hypervisor.Vm, error) {
-	glog.V(3).Infof("direct factory start create vm")
+	logrus.Debugf("direct factory start create vm")
 	vm, err := hypervisor.GetVm("", d.Config(), true)
 	if err == nil {
 		err = vm.Pause(true)
@@ -30,9 +30,9 @@ func (d *directFactory) GetBaseVm() (*hypervisor.Vm, error) {
 		}
 	}
 	if err == nil {
-		glog.V(3).Infof("direct factory created vm: %s", vm.Id)
+		logrus.Debugf("direct factory created vm: %s", vm.Id)
 	} else {
-		glog.Errorf("direct factory failed to create vm")
+		logrus.Errorf("direct factory failed to create vm")
 	}
 	return vm, err
 }

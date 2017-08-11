@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/hypervisor/types"
 )
@@ -68,7 +68,7 @@ func (qd *QemuDriver) InitContext(homeDir string) hypervisor.DriverContext {
 
 	logFile := filepath.Join(QemuLogDir, homeDir[strings.Index(homeDir, "vm-"):len(homeDir)-1]+".log")
 	if _, err := os.Create(logFile); err != nil {
-		glog.Errorf("create qemu log file failed: %v", err)
+		logrus.Errorf("create qemu log file failed: %v", err)
 	}
 	qemuLogFile := &QemuLogFile{
 		Name:   logFile,
@@ -179,9 +179,7 @@ func (qc *QemuContext) Shutdown(ctx *hypervisor.VmContext) {
 func (qc *QemuContext) Kill(ctx *hypervisor.VmContext) {
 	defer func() {
 		err := recover()
-		if glog.V(1) && err != nil {
-			glog.Info("kill qemu, but channel has already been closed")
-		}
+		logrus.Infof("kill qemu, but channel has already been closed: %v", err)
 	}()
 	qc.wdt <- "kill"
 }

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 )
 
@@ -67,11 +67,11 @@ func (f *QemuLogFile) Watch() {
 			break
 		}
 		if err != nil {
-			glog.Infof("read log file %s failed: %v", f.Name, err)
+			logrus.Infof("read log file %s failed: %v", f.Name, err)
 			return
 		}
 		if len(log) != 0 {
-			glog.Info("qemu log: ", string(log))
+			logrus.Info("qemu log: ", string(log))
 		}
 	}
 }
@@ -83,23 +83,23 @@ func watchDog(qc *QemuContext, hub chan hypervisor.VmEvent) {
 		if ok {
 			switch msg {
 			case "quit":
-				glog.V(1).Info("quit watch dog.")
+				logrus.Info("quit watch dog.")
 				return
 			case "kill":
 				success := false
 				if qc.process != nil {
-					glog.V(0).Infof("kill Qemu... %d", qc.process.Pid)
+					logrus.Infof("kill Qemu... %d", qc.process.Pid)
 					if err := qc.process.Kill(); err == nil {
 						success = true
 					}
 				} else {
-					glog.Warning("no process to be killed")
+					logrus.Warn("no process to be killed")
 				}
 				hub <- &hypervisor.VmKilledEvent{Success: success}
 				return
 			}
 		} else {
-			glog.V(1).Info("chan closed, quit watch dog.")
+			logrus.Info("chan closed, quit watch dog.")
 			break
 		}
 	}
@@ -132,10 +132,8 @@ func launchQemu(qc *QemuContext, ctx *hypervisor.VmContext) {
 		args = append(args, "-device", vsockDev)
 	}
 
-	if glog.V(3) {
-		glog.Infof("cmdline arguments: %s", strings.Join(args, " "))
-		glog.Infof("qemu log file: %s", qc.qemuLogFile.Name)
-	}
+	logrus.Infof("cmdline arguments: %s", strings.Join(args, " "))
+	logrus.Infof("qemu log file: %s", qc.qemuLogFile.Name)
 
 	cmd := exec.Command(qemu, args...)
 
@@ -147,14 +145,14 @@ func launchQemu(qc *QemuContext, ctx *hypervisor.VmContext) {
 	err := cmd.Run()
 
 	if stdout.Len() != 0 {
-		glog.V(1).Info(stdout.String())
+		logrus.Info(stdout.String())
 	}
 	if stderr.Len() != 0 {
-		glog.Error(stderr.String())
+		logrus.Error(stderr.String())
 	}
 	if err != nil {
 		//fail to daemonize
-		glog.Errorf("%v", err)
+		logrus.Errorf("%v", err)
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "try to start qemu failed"}
 		return
 	}
@@ -165,7 +163,7 @@ func launchQemu(qc *QemuContext, ctx *hypervisor.VmContext) {
 	for {
 		select {
 		case <-t.C:
-			glog.Error("open pid file timeout")
+			logrus.Error("open pid file timeout")
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "pid file not exist, timeout"}
 			return
 		default:
@@ -176,7 +174,7 @@ func launchQemu(qc *QemuContext, ctx *hypervisor.VmContext) {
 			if os.IsNotExist(err) {
 				continue
 			}
-			glog.Errorf("open pid file failed: %v", err)
+			logrus.Errorf("open pid file failed: %v", err)
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "open pid file failed"}
 			return
 		}
@@ -188,7 +186,7 @@ func launchQemu(qc *QemuContext, ctx *hypervisor.VmContext) {
 	for {
 		select {
 		case <-t.C:
-			glog.Error("read pid file timeout")
+			logrus.Error("read pid file timeout")
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "read pid file timeout"}
 			return
 		default:
@@ -199,7 +197,7 @@ func launchQemu(qc *QemuContext, ctx *hypervisor.VmContext) {
 			if err == io.EOF {
 				continue
 			}
-			glog.Errorf("read pid file failed: %v", err)
+			logrus.Errorf("read pid file failed: %v", err)
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "read pid file failed"}
 			return
 		}
@@ -208,13 +206,13 @@ func launchQemu(qc *QemuContext, ctx *hypervisor.VmContext) {
 
 	file.Close()
 
-	glog.V(3).Infof("starting daemon with pid: %d", pid)
+	logrus.Debugf("starting daemon with pid: %d", pid)
 
 	go qc.qemuLogFile.Watch()
 
 	err = ctx.DCtx.(*QemuContext).watchPid(int(pid), ctx.Hub)
 	if err != nil {
-		glog.Error("watch qemu process failed")
+		logrus.Error("watch qemu process failed")
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "watch qemu process failed"}
 		return
 	}

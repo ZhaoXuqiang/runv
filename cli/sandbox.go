@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/api"
 	"github.com/hyperhq/runv/factory"
 	singlefactory "github.com/hyperhq/runv/factory/single"
@@ -26,7 +26,7 @@ func setupFactory(context *cli.Context, spec *specs.Spec) (factory.Factory, erro
 	if err != nil {
 		return nil, fmt.Errorf("can't find kernel/initrd/bios/cbfs files")
 	}
-	glog.V(3).Infof("Using kernel: %s; Initrd: %s; bios: %s; cbfs: %s;", kernel, initrd, bios, cbfs)
+	logrus.Debugf("Using kernel: %s; Initrd: %s; bios: %s; cbfs: %s;", kernel, initrd, bios, cbfs)
 
 	driver := context.GlobalString("driver")
 	vsock := context.GlobalBool("vsock")
@@ -38,12 +38,12 @@ func setupFactory(context *cli.Context, spec *specs.Spec) (factory.Factory, erro
 		f, err := os.Open(path)
 		if err != nil {
 			err = fmt.Errorf("open template JSON configuration file failed: %v", err)
-			glog.Error(err)
+			logrus.Error(err)
 			return nil, err
 		}
 		if err := json.NewDecoder(f).Decode(&tconfig); err != nil {
 			err = fmt.Errorf("parse template JSON configuration file failed: %v", err)
-			glog.Error(err)
+			logrus.Error(err)
 			f.Close()
 			return nil, err
 		}
@@ -54,14 +54,14 @@ func setupFactory(context *cli.Context, spec *specs.Spec) (factory.Factory, erro
 			(initrd != "" && initrd != tconfig.Config.Initrd) ||
 			(bios != "" && bios != tconfig.Config.Bios) ||
 			(cbfs != "" && cbfs != tconfig.Config.Cbfs) {
-			glog.Warningf("template config is not match the driver, kernel, initrd, bios or cbfs argument, disable template")
+			logrus.Warnf("template config is not match the driver, kernel, initrd, bios or cbfs argument, disable template")
 			template = ""
 		} else if driver == "" {
 			driver = tconfig.Driver
 		}
 	} else if (bios == "" || cbfs == "") && (kernel == "" || initrd == "") {
 		err := fmt.Errorf("argument kernel+initrd or bios+cbfs must be set")
-		glog.Error(err)
+		logrus.Error(err)
 		return nil, err
 	}
 
@@ -85,7 +85,7 @@ func createAndLockSandBox(f factory.Factory, spec *specs.Spec, cpu int, mem int)
 
 	vm, err := f.GetVm(cpu, mem)
 	if err != nil {
-		glog.Errorf("Create VM failed with err: %v", err)
+		logrus.Errorf("Create VM failed with err: %v", err)
 		return nil, nil, err
 	}
 
@@ -101,10 +101,10 @@ func createAndLockSandBox(f factory.Factory, spec *specs.Spec, cpu int, mem int)
 
 	if !rsp.IsSuccess() {
 		vm.Kill()
-		glog.Errorf("StartPod fail, response: %#v", rsp)
+		logrus.Errorf("StartPod fail, response: %#v", rsp)
 		return nil, nil, fmt.Errorf("StartPod fail")
 	}
-	glog.V(3).Infof("%s init sandbox successfully", rsp.ResultId())
+	logrus.Debugf("%s init sandbox successfully", rsp.ResultId())
 
 	lockFile, err := lockSandbox(sandboxPath(vm))
 	if err != nil {
@@ -149,12 +149,12 @@ func destroySandbox(vm *hypervisor.Vm, lockFile *os.File) {
 	select {
 	case rsp, ok := <-result:
 		if !ok || !rsp.IsSuccess() {
-			glog.Errorf("StopPod fail: chan: %v, response: %v", ok, rsp)
+			logrus.Errorf("StopPod fail: chan: %v, response: %v", ok, rsp)
 			break
 		}
-		glog.V(1).Infof("StopPod successfully")
+		logrus.Infof("StopPod successfully")
 	case <-time.After(time.Second * 60):
-		glog.Errorf("StopPod timeout")
+		logrus.Errorf("StopPod timeout")
 	}
 	vm.Kill()
 
@@ -163,9 +163,8 @@ func destroySandbox(vm *hypervisor.Vm, lockFile *os.File) {
 	unlockSandbox(lockFile)
 
 	if err := os.RemoveAll(sandboxPath(vm)); err != nil {
-		glog.Errorf("can't remove vm dir %q: %v", filepath.Join(hypervisor.BaseDir, vm.Id), err)
+		logrus.Errorf("can't remove vm dir %q: %v", filepath.Join(hypervisor.BaseDir, vm.Id), err)
 	}
-	glog.Flush()
 }
 
 func releaseAndUnlockSandbox(vm *hypervisor.Vm, lockFile *os.File) error {
@@ -216,11 +215,11 @@ func setupHyperstartFunc(context *cli.Context) {
 func newHyperstart(context *cli.Context, vmid, ctlSock, streamSock string) (libhyperstart.Hyperstart, error) {
 	grpcSock := filepath.Join(hypervisor.BaseDir, vmid, "hyperstartgrpc.sock")
 
-	glog.Infof("newHyperstart() on socket: %s", grpcSock)
+	logrus.Infof("newHyperstart() on socket: %s", grpcSock)
 	if st, err := os.Stat(grpcSock); err != nil {
-		glog.V(2).Infof("grpcSock stat: %#v, err: %#v", st, err)
+		logrus.Debugf("grpcSock stat: %#v, err: %#v", st, err)
 		if !os.IsNotExist(err) {
-			glog.Errorf("%s existed with wrong stats", grpcSock)
+			logrus.Errorf("%s existed with wrong stats", grpcSock)
 			return nil, fmt.Errorf("%s existed with wrong stats", grpcSock)
 		}
 		err = createProxy(context, vmid, ctlSock, streamSock, grpcSock)
@@ -238,7 +237,7 @@ func newHyperstart(context *cli.Context, vmid, ctlSock, streamSock string) (libh
 
 	h, err := libhyperstart.NewGrpcBasedHyperstart(grpcSock)
 	if err != nil {
-		glog.Errorf("libhyperstart.NewGrpcBasedHyperstart() failed with err: %#v", err)
+		logrus.Errorf("libhyperstart.NewGrpcBasedHyperstart() failed with err: %#v", err)
 	}
 	return h, err
 }

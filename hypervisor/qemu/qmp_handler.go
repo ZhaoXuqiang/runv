@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/lib/utils"
 )
@@ -100,11 +100,11 @@ func (qmp *QmpResponse) UnmarshalJSON(raw []byte) error {
 	var tmp map[string]interface{}
 	var err error = nil
 	json.Unmarshal(raw, &tmp)
-	glog.V(3).Info("got a message ", string(raw))
+	logrus.Debug("got a message ", string(raw))
 	if _, ok := tmp["event"]; ok {
 		msg := &QmpEvent{}
 		err = json.Unmarshal(raw, msg)
-		glog.V(3).Info("got event: ", msg.Type)
+		logrus.Debug("got event: ", msg.Type)
 		qmp.msg = msg
 	} else if r, ok := tmp["return"]; ok {
 		msg := &QmpResult{}
@@ -134,11 +134,11 @@ func qmpFail(err string, respond func(err error)) *QmpFinish {
 }
 
 func qmpReceiver(qmp chan QmpInteraction, wait chan<- int, decoder *json.Decoder) {
-	glog.V(3).Info("Begin receive QMP message")
+	logrus.Debug("Begin receive QMP message")
 	for {
 		rsp := &QmpResponse{}
 		if err := decoder.Decode(rsp); err != nil {
-			glog.Errorf("QMP exit as got error: %v", err)
+			logrus.Errorf("QMP exit as got error: %v", err)
 			qmp <- &QmpInternalError{cause: err.Error()}
 			/* After Error report, send wait notification to close qmp channel */
 			close(wait)
@@ -149,7 +149,7 @@ func qmpReceiver(qmp chan QmpInteraction, wait chan<- int, decoder *json.Decoder
 		qmp <- msg
 
 		if msg.MessageType() == QMP_EVENT && msg.(*QmpEvent).Type == QMP_EVENT_SHUTDOWN {
-			glog.V(3).Info("Shutdown, quit QMP receiver")
+			logrus.Debug("Shutdown, quit QMP receiver")
 			/* After shutdown, send wait notification to close qmp channel */
 			close(wait)
 			return
@@ -161,12 +161,12 @@ func qmpInitializer(ctx *hypervisor.VmContext) {
 	qc := qemuContext(ctx)
 	conn, err := utils.UnixSocketConnect(qc.qmpSockName)
 	if err != nil {
-		glog.Errorf("failed to connected to %s: %v", qc.qmpSockName, err)
+		logrus.Errorf("failed to connected to %s: %v", qc.qmpSockName, err)
 		qc.qmp <- qmpFail(err.Error(), nil)
 		return
 	}
 
-	glog.V(3).Infof("connected to %s", qc.qmpSockName)
+	logrus.Debugf("connected to %s", qc.qmpSockName)
 
 	var msg map[string]interface{}
 	decoder := json.NewDecoder(conn)
@@ -176,43 +176,43 @@ func qmpInitializer(ctx *hypervisor.VmContext) {
 		}
 	}()
 
-	glog.V(3).Info("begin qmp init...")
+	logrus.Debug("begin qmp init...")
 
 	err = decoder.Decode(&msg)
 	if err != nil {
-		glog.Errorf("get qmp welcome failed: %v", err)
+		logrus.Errorf("get qmp welcome failed: %v", err)
 		qc.qmp <- qmpFail(err.Error(), nil)
 		return
 	}
 
-	glog.V(3).Infof("got qmp welcome, now sending command qmp_capabilities")
+	logrus.Debugf("got qmp welcome, now sending command qmp_capabilities")
 
 	cmd, err := json.Marshal(QmpCommand{Execute: "qmp_capabilities"})
 	if err != nil {
-		glog.Errorf("qmp_capabilities marshal failed: %v", err)
+		logrus.Errorf("qmp_capabilities marshal failed: %v", err)
 		qc.qmp <- qmpFail(err.Error(), nil)
 		return
 	}
 	_, err = conn.Write(cmd)
 	if err != nil {
-		glog.Errorf("qmp_capabilities send failed: %v", err)
+		logrus.Errorf("qmp_capabilities send failed: %v", err)
 		qc.qmp <- qmpFail(err.Error(), nil)
 		return
 	}
 
-	glog.V(3).Info("waiting for response")
+	logrus.Debug("waiting for response")
 	rsp := &QmpResponse{}
 	err = decoder.Decode(rsp)
 	if err != nil {
-		glog.Errorf("response receive failed: %v", err)
+		logrus.Errorf("response receive failed: %v", err)
 		qc.qmp <- qmpFail(err.Error(), nil)
 		return
 	}
 
-	glog.V(3).Info("got for response")
+	logrus.Debug("got for response")
 
 	if rsp.msg.MessageType() == QMP_RESULT {
-		glog.V(3).Info("QMP connection initialized")
+		logrus.Debug("QMP connection initialized")
 		qc.qmp <- &QmpInit{
 			conn:    conn.(*net.UnixConn),
 			decoder: decoder,
@@ -224,7 +224,7 @@ func qmpInitializer(ctx *hypervisor.VmContext) {
 }
 
 func qmpCommander(handler chan QmpInteraction, conn *net.UnixConn, session *QmpSession, feedback chan QmpInteraction) {
-	glog.V(3).Info("Begin process command session")
+	logrus.Debug("Begin process command session")
 	for _, cmd := range session.commands {
 		msg, err := json.Marshal(*cmd)
 		if err != nil {
@@ -237,18 +237,18 @@ func qmpCommander(handler chan QmpInteraction, conn *net.UnixConn, session *QmpS
 		for repeat := 0; !success && repeat < 3; repeat++ {
 
 			if len(cmd.Scm) > 0 {
-				glog.V(3).Infof("send cmd with scm (%d bytes) (%d) %s", len(cmd.Scm), repeat+1, string(msg))
+				logrus.Debugf("send cmd with scm (%d bytes) (%d) %s", len(cmd.Scm), repeat+1, string(msg))
 				f, _ := conn.File()
 				fd := f.Fd()
 				syscall.Sendmsg(int(fd), msg, cmd.Scm, nil, 0)
 			} else {
-				glog.V(3).Infof("sending command (%d) %s", repeat+1, string(msg))
+				logrus.Debugf("sending command (%d) %s", repeat+1, string(msg))
 				conn.Write(msg)
 			}
 
 			res, ok := <-feedback
 			if !ok {
-				glog.V(3).Infof("QMP command result chan closed")
+				logrus.Debugf("QMP command result chan closed")
 				return
 			}
 			switch res.MessageType() {
@@ -257,11 +257,11 @@ func qmpCommander(handler chan QmpInteraction, conn *net.UnixConn, session *QmpS
 				break
 			//success
 			case QMP_ERROR:
-				glog.Warning("got one qmp error")
+				logrus.Warn("got one qmp error")
 				qe = res.(*QmpError)
 				time.Sleep(1000 * time.Millisecond)
 			case QMP_INTERNAL_ERROR:
-				glog.V(3).Info("QMP quit... commander quit... ")
+				logrus.Debug("QMP quit... commander quit... ")
 				return
 			}
 		}
@@ -281,7 +281,7 @@ func qmpHandler(ctx *hypervisor.VmContext) {
 
 	qc := qemuContext(ctx)
 	timer := time.AfterFunc(10*time.Second, func() {
-		glog.Warning("Initializer Timeout.")
+		logrus.Warn("Initializer Timeout.")
 		qc.qmp <- &QmpTimeout{}
 	})
 
@@ -295,23 +295,23 @@ func qmpHandler(ctx *hypervisor.VmContext) {
 	loop := func(msg QmpInteraction) {
 		switch msg.MessageType() {
 		case QMP_SESSION:
-			glog.V(3).Infof("got new session")
+			logrus.Debugf("got new session")
 			buf = append(buf, msg.(*QmpSession))
 			if len(buf) == 1 {
 				go qmpCommander(qc.qmp, conn, msg.(*QmpSession), res)
 			}
 		case QMP_FINISH:
-			glog.V(3).Infof("session finished, buffer size %d", len(buf))
+			logrus.Debugf("session finished, buffer size %d", len(buf))
 			r := msg.(*QmpFinish)
 			if r.success {
-				glog.V(3).Info("success ")
+				logrus.Debug("success ")
 				r.respond(nil)
 			} else {
 				reason := "unknown"
 				if c, ok := r.reason["error"]; ok {
 					reason = c.(string)
 				}
-				glog.Errorf("QMP command failed: %s", reason)
+				logrus.Errorf("QMP command failed: %s", reason)
 				r.respond(errors.New(reason))
 			}
 			buf = buf[1:]
@@ -322,16 +322,16 @@ func qmpHandler(ctx *hypervisor.VmContext) {
 			res <- msg
 		case QMP_EVENT:
 			ev := msg.(*QmpEvent)
-			glog.V(3).Info("got QMP event ", ev.Type)
+			logrus.Debug("got QMP event ", ev.Type)
 			if ev.Type == QMP_EVENT_SHUTDOWN {
-				glog.V(3).Info("got QMP shutdown event, quit...")
+				logrus.Debug("got QMP shutdown event, quit...")
 				handler = nil
 				ctx.Hub <- &hypervisor.VmExit{}
 			}
 		case QMP_INTERNAL_ERROR:
 			res <- msg
 			handler = nil
-			glog.V(3).Info("QMP handler quit as received ", msg.(*QmpInternalError).cause)
+			logrus.Debug("QMP handler quit as received ", msg.(*QmpInternalError).cause)
 			ctx.Hub <- &hypervisor.Interrupted{Reason: msg.(*QmpInternalError).cause}
 		case QMP_QUIT:
 			handler = nil
@@ -346,7 +346,7 @@ func qmpHandler(ctx *hypervisor.VmContext) {
 			init := msg.(*QmpInit)
 			conn = init.conn
 			handler = loop
-			glog.V(3).Info("QMP initialzed, go into main QMP loop")
+			logrus.Debug("QMP initialzed, go into main QMP loop")
 
 			//routine for get message
 			go qmpReceiver(qc.qmp, qc.waitQmp, init.decoder)
@@ -361,16 +361,16 @@ func qmpHandler(ctx *hypervisor.VmContext) {
 					Reason: finish.reason["error"].(string),
 				}
 				handler = nil
-				glog.Error("QMP initialize failed")
+				logrus.Error("QMP initialize failed")
 				close(qc.waitQmp)
 			}
 		case QMP_TIMEOUT:
 			ctx.Hub <- &hypervisor.InitFailedEvent{
 				Reason: "QMP Init timeout",
 			}
-			glog.Error("QMP initialize timeout")
+			logrus.Error("QMP initialize timeout")
 		case QMP_SESSION:
-			glog.Info("got new session during initializing")
+			logrus.Info("got new session during initializing")
 			buf = append(buf, msg.(*QmpSession))
 		}
 	}
@@ -380,7 +380,7 @@ func qmpHandler(ctx *hypervisor.VmContext) {
 	for handler != nil {
 		msg, ok := <-qc.qmp
 		if !ok {
-			glog.Info("QMP channel closed, Quit qmp handler")
+			logrus.Info("QMP channel closed, Quit qmp handler")
 			break
 		}
 		handler(msg)

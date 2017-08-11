@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/factory/base"
 	"github.com/hyperhq/runv/factory/direct"
 	"github.com/hyperhq/runv/hypervisor"
@@ -28,8 +28,8 @@ func New(templateRoot string, b hypervisor.BootConfig) base.Factory {
 	}
 	s, err := template.CreateTemplateVM(filepath.Join(templateRoot, vmName), vmName, b)
 	if err != nil {
-		glog.Errorf("failed to create template factory: %v", err)
-		glog.V(3).Infof("use direct factory instead")
+		logrus.Errorf("failed to create template factory: %v", err)
+		logrus.Debugf("use direct factory instead")
 		return direct.New(b)
 	}
 	return &templateFactory{s: s}

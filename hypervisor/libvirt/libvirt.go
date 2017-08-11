@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/lib/utils"
 	libvirtgo "github.com/rgbkrk/libvirt-go"
@@ -37,7 +37,7 @@ func InitDriver() *LibvirtDriver {
 	hypervisor.PciAddrFrom = 0x06
 	conn, err := libvirtgo.NewVirConnection(LibvirtdAddress)
 	if err != nil {
-		glog.Error("fail to connect to libvirtd ", LibvirtdAddress, err)
+		logrus.Error("fail to connect to libvirtd ", LibvirtdAddress, err)
 		return nil
 	}
 
@@ -94,7 +94,7 @@ func (ld *LibvirtDriver) SupportVmSocket() bool {
 
 func (ld *LibvirtDriver) checkConnection() error {
 	if alive, _ := ld.conn.IsAlive(); !alive {
-		glog.V(1).Info("libvirt disconnected, reconnect")
+		logrus.Info("libvirt disconnected, reconnect")
 		conn, err := libvirtgo.NewVirConnection(LibvirtdAddress)
 		if err != nil {
 			return err
@@ -113,7 +113,7 @@ func (ld *LibvirtDriver) lookupDomainByName(name string) (libvirtgo.VirDomain, e
 	domain, err := ld.conn.LookupDomainByName(name)
 	if err != nil {
 		if res := ld.checkConnection(); res != nil {
-			glog.Error(res)
+			logrus.Error(res)
 			return domain, err
 		}
 		domain, err = ld.conn.LookupDomainByName(name)
@@ -129,7 +129,7 @@ func (ld *LibvirtDriver) lookupCephSecretByUsage(usageID string) (libvirtgo.VirS
 	sec, err := ld.conn.LookupSecretByUsage(libvirtgo.VIR_SECRET_USAGE_TYPE_CEPH, usageID)
 	if err != nil {
 		if res := ld.checkConnection(); res != nil {
-			glog.Error(res)
+			logrus.Error(res)
 			return sec, err
 		}
 		return ld.conn.LookupSecretByUsage(libvirtgo.VIR_SECRET_USAGE_TYPE_CEPH, usageID)
@@ -145,7 +145,7 @@ func (ld *LibvirtDriver) secretDefineXML(secretXML string) (libvirtgo.VirSecret,
 	sec, err := ld.conn.SecretDefineXML(secretXML, 0)
 	if err != nil {
 		if res := ld.checkConnection(); res != nil {
-			glog.Error(res)
+			logrus.Error(res)
 			return sec, err
 		}
 
@@ -161,7 +161,7 @@ func (ld *LibvirtDriver) secretSetValue(uuid, value string) error {
 
 	if err := ld.conn.SecretSetValue(uuid, value); err != nil {
 		if res := ld.checkConnection(); res != nil {
-			glog.Error(res)
+			logrus.Error(res)
 			return err
 		}
 
@@ -476,7 +476,7 @@ func (lc *LibvirtContext) domainXml(ctx *hypervisor.VmContext) (string, error) {
 		dom.CommandLine.Cmds = append(dom.CommandLine.Cmds, qemucmd{Value: "-device"})
 		vsockDev := fmt.Sprintf("vhost-vsock-pci,id=vsock0,bus=pci.0,addr=%x,guest-cid=%d", ctx.NextPciAddr(), ctx.GuestCid)
 		dom.CommandLine.Cmds = append(dom.CommandLine.Cmds, qemucmd{Value: vsockDev})
-		glog.Infof("vsock cmds xml: %v", dom.CommandLine)
+		logrus.Infof("vsock cmds xml: %v", dom.CommandLine)
 	}
 
 	cmd, err := exec.LookPath("qemu-system-x86_64")
@@ -638,11 +638,11 @@ func (lc *LibvirtContext) domainXml(ctx *hypervisor.VmContext) (string, error) {
 func (lc *LibvirtContext) Launch(ctx *hypervisor.VmContext) {
 	domainXml, err := lc.domainXml(ctx)
 	if err != nil {
-		glog.Error("Fail to get domain xml configuration:", err)
+		logrus.Error("Fail to get domain xml configuration:", err)
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: err.Error()}
 		return
 	}
-	glog.V(3).Infof("domainXML: %v", domainXml)
+	logrus.Debugf("domainXML: %v", domainXml)
 	var domain libvirtgo.VirDomain
 	if ctx.Boot.BootFromTemplate {
 		domain, err = lc.driver.conn.DomainCreateXML(domainXml, libvirtgo.VIR_DOMAIN_START_PAUSED)
@@ -650,26 +650,26 @@ func (lc *LibvirtContext) Launch(ctx *hypervisor.VmContext) {
 		domain, err = lc.driver.conn.DomainCreateXML(domainXml, libvirtgo.VIR_DOMAIN_NONE)
 	}
 	if err != nil {
-		glog.Error("Fail to launch domain ", err)
+		logrus.Error("Fail to launch domain ", err)
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: err.Error()}
 		return
 	}
 	lc.domain = &domain
 	err = lc.domain.SetMemoryStatsPeriod(1, 0)
 	if err != nil {
-		glog.Errorf("SetMemoryStatsPeriod failed for domain %v", ctx.Id)
+		logrus.Errorf("SetMemoryStatsPeriod failed for domain %v", ctx.Id)
 	}
 }
 
 func (lc *LibvirtContext) Associate(ctx *hypervisor.VmContext) {
 	name, err := lc.domain.GetName()
 	if err != nil {
-		glog.Error("Fail to get domain name ", err)
+		logrus.Error("Fail to get domain name ", err)
 		return
 	}
 
 	if name != ctx.Id {
-		glog.Errorf("domain name %s is not equal to context id %s", name, ctx.Id)
+		logrus.Errorf("domain name %s is not equal to context id %s", name, ctx.Id)
 	}
 }
 
@@ -910,7 +910,7 @@ func scsiId2Addr(id int) (int, int, error) {
 
 func (lc *LibvirtContext) AddDisk(ctx *hypervisor.VmContext, sourceType string, blockInfo *hypervisor.DiskDescriptor, result chan<- hypervisor.VmEvent) {
 	if lc.domain == nil {
-		glog.Error("Cannot find domain")
+		logrus.Error("Cannot find domain")
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -919,7 +919,7 @@ func (lc *LibvirtContext) AddDisk(ctx *hypervisor.VmContext, sourceType string, 
 
 	secretUUID, err := lc.diskSecretUUID(blockInfo)
 	if err != nil {
-		glog.Error("generate disk-get-secret failed, ", err.Error())
+		logrus.Error("generate disk-get-secret failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -928,17 +928,17 @@ func (lc *LibvirtContext) AddDisk(ctx *hypervisor.VmContext, sourceType string, 
 
 	diskXml, err := diskXml(blockInfo, secretUUID)
 	if err != nil {
-		glog.Error("generate attach-disk-xml failed, ", err.Error())
+		logrus.Error("generate attach-disk-xml failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
 		return
 	}
-	glog.V(3).Infof("diskxml: %s", diskXml)
+	logrus.Debugf("diskxml: %s", diskXml)
 
 	err = lc.domain.AttachDeviceFlags(diskXml, libvirtgo.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
 	if err != nil {
-		glog.Error("attach disk device failed, ", err.Error())
+		logrus.Error("attach disk device failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -953,7 +953,7 @@ func (lc *LibvirtContext) AddDisk(ctx *hypervisor.VmContext, sourceType string, 
 
 func (lc *LibvirtContext) RemoveDisk(ctx *hypervisor.VmContext, blockInfo *hypervisor.DiskDescriptor, callback hypervisor.VmEvent, result chan<- hypervisor.VmEvent) {
 	if lc.domain == nil {
-		glog.Error("Cannot find domain")
+		logrus.Error("Cannot find domain")
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -962,7 +962,7 @@ func (lc *LibvirtContext) RemoveDisk(ctx *hypervisor.VmContext, blockInfo *hyper
 
 	secretUUID, err := lc.diskSecretUUID(blockInfo)
 	if err != nil {
-		glog.Error("generate disk-get-secret failed, ", err.Error())
+		logrus.Error("generate disk-get-secret failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -971,7 +971,7 @@ func (lc *LibvirtContext) RemoveDisk(ctx *hypervisor.VmContext, blockInfo *hyper
 
 	diskXml, err := diskXml(blockInfo, secretUUID)
 	if err != nil {
-		glog.Error("generate detach-disk-xml failed, ", err.Error())
+		logrus.Error("generate detach-disk-xml failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: callback,
 		}
@@ -979,7 +979,7 @@ func (lc *LibvirtContext) RemoveDisk(ctx *hypervisor.VmContext, blockInfo *hyper
 	}
 	err = lc.domain.DetachDeviceFlags(diskXml, libvirtgo.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
 	if err != nil {
-		glog.Error("detach disk device failed, ", err.Error())
+		logrus.Error("detach disk device failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: callback,
 		}
@@ -1071,7 +1071,7 @@ func nicXml(bridge, device, mac string, addr int, config *hypervisor.BootConfig)
 
 func (lc *LibvirtContext) AddNic(ctx *hypervisor.VmContext, host *hypervisor.HostNicInfo, guest *hypervisor.GuestNicInfo, result chan<- hypervisor.VmEvent) {
 	if lc.domain == nil {
-		glog.Error("Cannot find domain")
+		logrus.Error("Cannot find domain")
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -1080,17 +1080,17 @@ func (lc *LibvirtContext) AddNic(ctx *hypervisor.VmContext, host *hypervisor.Hos
 
 	nicXml, err := nicXml(host.Bridge, host.Device, host.Mac, guest.Busaddr, ctx.Boot)
 	if err != nil {
-		glog.Error("generate attach-nic-xml failed, ", err.Error())
+		logrus.Error("generate attach-nic-xml failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
 		return
 	}
-	glog.V(3).Infof("nicxml: %s", nicXml)
+	logrus.Debugf("nicxml: %s", nicXml)
 
 	err = lc.domain.AttachDeviceFlags(nicXml, libvirtgo.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
 	if err != nil {
-		glog.Error("attach nic failed, ", err.Error())
+		logrus.Error("attach nic failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -1107,7 +1107,7 @@ func (lc *LibvirtContext) AddNic(ctx *hypervisor.VmContext, host *hypervisor.Hos
 
 func (lc *LibvirtContext) RemoveNic(ctx *hypervisor.VmContext, n *hypervisor.InterfaceCreated, callback hypervisor.VmEvent, result chan<- hypervisor.VmEvent) {
 	if lc.domain == nil {
-		glog.Error("Cannot find domain")
+		logrus.Error("Cannot find domain")
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -1116,7 +1116,7 @@ func (lc *LibvirtContext) RemoveNic(ctx *hypervisor.VmContext, n *hypervisor.Int
 
 	nicXml, err := nicXml(n.Bridge, n.HostDevice, n.MacAddr, n.PCIAddr, ctx.Boot)
 	if err != nil {
-		glog.Error("generate detach-nic-xml failed, ", err.Error())
+		logrus.Error("generate detach-nic-xml failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: callback,
 		}
@@ -1125,7 +1125,7 @@ func (lc *LibvirtContext) RemoveNic(ctx *hypervisor.VmContext, n *hypervisor.Int
 
 	err = lc.domain.DetachDeviceFlags(nicXml, libvirtgo.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
 	if err != nil {
-		glog.Error("detach nic failed, ", err.Error())
+		logrus.Error("detach nic failed, ", err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: callback,
 		}
@@ -1135,7 +1135,7 @@ func (lc *LibvirtContext) RemoveNic(ctx *hypervisor.VmContext, n *hypervisor.Int
 }
 
 func (lc *LibvirtContext) SetCpus(ctx *hypervisor.VmContext, cpus int) error {
-	glog.V(3).Infof("setcpus %d", cpus)
+	logrus.Debugf("setcpus %d", cpus)
 	if lc.domain == nil {
 		return fmt.Errorf("Cannot find domain")
 	}
@@ -1145,7 +1145,7 @@ func (lc *LibvirtContext) SetCpus(ctx *hypervisor.VmContext, cpus int) error {
 
 func (lc *LibvirtContext) AddMem(ctx *hypervisor.VmContext, slot, size int) error {
 	memdevXml := fmt.Sprintf("<memory model='dimm'><target><size unit='MiB'>%d</size><node>0</node></target></memory>", size)
-	glog.V(3).Infof("memdevXml: %s", memdevXml)
+	logrus.Debugf("memdevXml: %s", memdevXml)
 	if lc.domain == nil {
 		return fmt.Errorf("Cannot find domain")
 	}
@@ -1154,7 +1154,7 @@ func (lc *LibvirtContext) AddMem(ctx *hypervisor.VmContext, slot, size int) erro
 }
 
 func (lc *LibvirtContext) Save(ctx *hypervisor.VmContext, path string) error {
-	glog.V(3).Infof("save domain to: %s", path)
+	logrus.Debugf("save domain to: %s", path)
 
 	if ctx.Boot.BootToBeTemplate {
 		err := exec.Command("virsh", "-c", LibvirtdAddress, "qemu-monitor-command", ctx.Id, "--hmp", "migrate_set_capability bypass-shared-memory on").Run()

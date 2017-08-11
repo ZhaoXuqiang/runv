@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/docker/pkg/symlink"
-	"github.com/golang/glog"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/lib/utils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -26,7 +26,7 @@ func mountToRootfs(m *specs.Mount, rootfs, mountLabel string) error {
 
 	switch m.Type {
 	case "proc", "sysfs", "mqueue", "tmpfs", "cgroup", "devpts":
-		glog.V(3).Infof("Skip mount point %q of type %s", m.Destination, m.Type)
+		logrus.Debugf("Skip mount point %q of type %s", m.Destination, m.Type)
 		return nil
 	case "bind":
 		stat, err := os.Stat(m.Source)
@@ -148,14 +148,14 @@ func setupContainerFs(vm *hypervisor.Vm, bundle, container string, spec *specs.S
 	os.MkdirAll(vmRootfs, 0755)
 
 	if err = mount.MakePrivate(containerSharedFs); err != nil {
-		glog.Errorf("Make %q private failed: %v", containerSharedFs, err)
+		logrus.Errorf("Make %q private failed: %v", containerSharedFs, err)
 		return err
 	}
 
 	// Mount rootfs
 	err = utils.Mount(rootPath, vmRootfs)
 	if err != nil {
-		glog.Errorf("mount %s to %s failed: %s\n", rootPath, vmRootfs, err.Error())
+		logrus.Errorf("mount %s to %s failed: %s\n", rootPath, vmRootfs, err.Error())
 		return err
 	}
 
@@ -176,7 +176,7 @@ func setupContainerFs(vm *hypervisor.Vm, bundle, container string, spec *specs.S
 	if spec.Root.Readonly {
 		err = utils.SetReadonly(vmRootfs)
 		if err != nil {
-			glog.Errorf("set rootfs %s readonly failed: %s\n", vmRootfs, err.Error())
+			logrus.Errorf("set rootfs %s readonly failed: %s\n", vmRootfs, err.Error())
 			return err
 		}
 	}

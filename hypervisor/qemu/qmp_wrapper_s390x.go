@@ -5,14 +5,14 @@ package qemu
 import (
 	"syscall"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 )
 
 func newNetworkAddSession(ctx *hypervisor.VmContext, qc *QemuContext, id string, fd uint64, device, mac string, index, addr int, result chan<- hypervisor.VmEvent) {
 	commands := make([]*QmpCommand, 3)
 	scm := syscall.UnixRights(int(fd))
-	glog.V(1).Infof("send net to qemu at %d", int(fd))
+	logrus.Infof("send net to qemu at %d", int(fd))
 	commands[0] = &QmpCommand{
 		Execute: "getfd",
 		Arguments: map[string]interface{}{

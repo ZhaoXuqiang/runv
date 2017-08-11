@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/api"
 	"github.com/vishvananda/netlink"
 )
@@ -140,24 +140,24 @@ func InitNetwork(bIface, bIP string, disable bool) error {
 
 	addr, err := GetIfaceAddr(BridgeIface)
 	if err != nil {
-		glog.V(1).Infof("create bridge %s, ip %s", BridgeIface, BridgeIP)
+		logrus.Infof("create bridge %s, ip %s", BridgeIface, BridgeIP)
 		// No Bridge existent, create one
 
 		// If the iface is not found, try to create it
 		if err := configureBridge(BridgeIP, BridgeIface); err != nil {
-			glog.Error("create bridge failed")
+			logrus.Error("create bridge failed")
 			return err
 		}
 
 		addr, err = GetIfaceAddr(BridgeIface)
 		if err != nil {
-			glog.Error("get iface addr failed")
+			logrus.Error("get iface addr failed")
 			return err
 		}
 
 		BridgeIPv4Net = addr.(*net.IPNet)
 	} else {
-		glog.V(1).Info("bridge exist")
+		logrus.Info("bridge exist")
 		// Validate that the bridge ip matches the ip specified by BridgeIP
 		BridgeIPv4Net = addr.(*net.IPNet)
 
@@ -218,7 +218,7 @@ func configureBridge(bridgeIP, bridgeIface string) error {
 	if len(bridgeIP) != 0 {
 		_, _, err := net.ParseCIDR(bridgeIP)
 		if err != nil {
-			glog.Errorf("%s parsecidr failed", bridgeIP)
+			logrus.Errorf("%s parsecidr failed", bridgeIP)
 			return err
 		}
 		ifaceAddr = bridgeIP
@@ -231,7 +231,7 @@ func configureBridge(bridgeIP, bridgeIface string) error {
 	if err := CreateBridgeIface(bridgeIface); err != nil {
 		// The bridge may already exist, therefore we can ignore an "exists" error
 		if !os.IsExist(err) {
-			glog.Errorf("CreateBridgeIface failed %s %s", bridgeIface, ifaceAddr)
+			logrus.Errorf("CreateBridgeIface failed %s %s", bridgeIface, ifaceAddr)
 			return err
 		}
 	}
@@ -256,7 +256,7 @@ func configureBridge(bridgeIP, bridgeIface string) error {
 		return err
 	}
 
-	glog.V(3).Infof("Allocate IP Address %s for bridge %s", ipAddr, bridgeIface)
+	logrus.Debugf("Allocate IP Address %s for bridge %s", ipAddr, bridgeIface)
 
 	if err := NetworkLinkAddIp(iface, ipAddr, ipNet); err != nil {
 		return fmt.Errorf("Unable to add private network: %s", err)
@@ -407,7 +407,7 @@ func newIfAddrmsg(family int) *IfAddrmsg {
 func (msg *IfAddrmsg) ToWireFormat() []byte {
 
 	length := syscall.SizeofIfAddrmsg
-	glog.V(1).Infof("ifaddmsg length %d", length)
+	logrus.Infof("ifaddmsg length %d", length)
 	b := make([]byte, length)
 	b[0] = msg.Family
 	b[1] = msg.Prefixlen
@@ -702,7 +702,7 @@ func AddToBridge(iface, master *net.Interface, options string) error {
 }
 
 func AddToOpenvswitchBridge(iface, master *net.Interface, options string) error {
-	glog.V(3).Infof("Found ovs bridge %s, attaching tap %s to it\n", master.Name, iface.Name)
+	logrus.Debugf("Found ovs bridge %s, attaching tap %s to it\n", master.Name, iface.Name)
 
 	// ovs command "ovs-vsctl add-port BRIDGE PORT" add netwok device PORT to BRIDGE,
 	// PORT and BRIDGE here indicate the device name respectively.
@@ -743,7 +743,7 @@ func GenRandomMac() (string, error) {
 	_, err := rand.Read(bytes)
 
 	if err != nil {
-		glog.Errorf("get random number faild")
+		logrus.Errorf("get random number faild")
 		return "", err
 	}
 
@@ -758,7 +758,7 @@ func GenRandomMac() (string, error) {
 func UpAndAddToBridge(name, bridge string) error {
 	inf, err := net.InterfaceByName(name)
 	if err != nil {
-		glog.Error("cannot find network interface ", name)
+		logrus.Error("cannot find network interface ", name)
 		return err
 	}
 	if bridge == "" {
@@ -766,17 +766,17 @@ func UpAndAddToBridge(name, bridge string) error {
 	}
 	brg, err := net.InterfaceByName(bridge)
 	if err != nil {
-		glog.Error("cannot find bridge interface ", bridge)
+		logrus.Error("cannot find bridge interface ", bridge)
 		return err
 	}
 	err = AddToBridge(inf, brg, "")
 	if err != nil {
-		glog.Errorf("cannot add %s to %s ", name, bridge)
+		logrus.Errorf("cannot add %s to %s ", name, bridge)
 		return err
 	}
 	err = NetworkLinkUp(inf)
 	if err != nil {
-		glog.Error("cannot up interface ", name)
+		logrus.Error("cannot up interface ", name)
 		return err
 	}
 
@@ -811,28 +811,28 @@ func GetTapFd(tapname, bridge, options string) (device string, tapFile *os.File,
 
 	tapIface, err := net.InterfaceByName(device)
 	if err != nil {
-		glog.Errorf("get interface by name %s failed %s", device, err)
+		logrus.Errorf("get interface by name %s failed %s", device, err)
 		tapFile.Close()
 		return "", nil, err
 	}
 
 	bIface, err := net.InterfaceByName(bridge)
 	if err != nil {
-		glog.Errorf("get interface by name %s failed", bridge)
+		logrus.Errorf("get interface by name %s failed", bridge)
 		tapFile.Close()
 		return "", nil, err
 	}
 
 	err = AddToBridge(tapIface, bIface, options)
 	if err != nil {
-		glog.Errorf("Add to bridge failed %s %s", bridge, device)
+		logrus.Errorf("Add to bridge failed %s %s", bridge, device)
 		tapFile.Close()
 		return "", nil, err
 	}
 
 	err = NetworkLinkUp(tapIface)
 	if err != nil {
-		glog.Errorf("Link up device %s failed", device)
+		logrus.Errorf("Link up device %s failed", device)
 		tapFile.Close()
 		return "", nil, err
 	}
@@ -852,7 +852,7 @@ func AllocateAddr(requestedIP string) (*Settings, error) {
 
 	mac, err := GenRandomMac()
 	if err != nil {
-		glog.Errorf("Generate Random Mac address failed")
+		logrus.Errorf("Generate Random Mac address failed")
 		return nil, err
 	}
 
@@ -872,7 +872,7 @@ func Configure(addrOnly bool, inf *api.InterfaceDescription) (*Settings, error) 
 
 	ip, mask, err := ipParser(inf.Ip)
 	if err != nil {
-		glog.Errorf("Parse config IP failed %s", err)
+		logrus.Errorf("Parse config IP failed %s", err)
 		return nil, err
 	}
 
@@ -881,7 +881,7 @@ func Configure(addrOnly bool, inf *api.InterfaceDescription) (*Settings, error) 
 	/* TODO: Move port maps out of the plugging procedure
 	err = SetupPortMaps(ip.String(), maps)
 	if err != nil {
-		glog.Errorf("Setup Port Map failed %s", err)
+		logrus.Errorf("Setup Port Map failed %s", err)
 		return nil, err
 	}
 	*/
@@ -890,7 +890,7 @@ func Configure(addrOnly bool, inf *api.InterfaceDescription) (*Settings, error) 
 	if mac == "" {
 		mac, err = GenRandomMac()
 		if err != nil {
-			glog.Errorf("Generate Random Mac address failed")
+			logrus.Errorf("Generate Random Mac address failed")
 			return nil, err
 		}
 	}
@@ -948,7 +948,7 @@ func Release(releasedIP string) error {
 
 	/* TODO: call this after release networks
 	if err := ReleasePortMaps(releasedIP, maps); err != nil {
-		glog.Errorf("fail to release port map %s", err)
+		logrus.Errorf("fail to release port map %s", err)
 		return err
 	}
 	*/
@@ -956,7 +956,7 @@ func Release(releasedIP string) error {
 }
 
 func ipParser(ipstr string) (net.IP, net.IPMask, error) {
-	glog.V(1).Info("parse IP addr ", ipstr)
+	logrus.Info("parse IP addr ", ipstr)
 	ip, ipnet, err := net.ParseCIDR(ipstr)
 	if err == nil {
 		return ip, ipnet.Mask, nil

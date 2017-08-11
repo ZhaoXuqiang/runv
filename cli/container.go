@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/api"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/lib/linuxsignal"
@@ -23,17 +23,17 @@ import (
 func startContainer(vm *hypervisor.Vm, root, container string, spec *specs.Spec, state *State) error {
 	err := vm.StartContainer(container)
 	if err != nil {
-		glog.V(1).Infof("Start Container fail: fail to start container with err: %#v", err)
+		logrus.Infof("Start Container fail: fail to start container with err: %#v\n", err)
 		return err
 	}
 
 	err = syscall.Kill(state.Pid, syscall.SIGUSR1)
 	if err != nil {
-		glog.V(1).Infof("failed to notify the shim to work", err.Error())
+		logrus.Infof("failed to notify the shim to work", err.Error())
 		return err
 	}
 
-	glog.V(3).Infof("change the status of container %s to `running`", container)
+	logrus.Debugf("change the status of container %s to `running`", container)
 	state.Status = "running"
 	state.ContainerCreateTime = time.Now().UTC().Unix()
 	if err = saveStateFile(root, container, state); err != nil {
@@ -56,7 +56,7 @@ func startContainer(vm *hypervisor.Vm, root, container string, spec *specs.Spec,
 
 	err = execPoststartHooks(spec, state)
 	if err != nil {
-		glog.V(1).Infof("execute Poststart hooks failed %s", err.Error())
+		logrus.Infof("execute Poststart hooks failed %s\n", err.Error())
 	}
 
 	return err
@@ -72,7 +72,7 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 		}
 	}()
 
-	glog.V(3).Infof("vm.AddContainer()")
+	logrus.Debugf("vm.AddContainer()")
 	config := api.ContainerDescriptionFromOCF(container, spec)
 	r := vm.AddContainer(config)
 	if !r.IsSuccess() {
@@ -88,12 +88,12 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 	stateDir := filepath.Join(stateRoot, container)
 	_, err = os.Stat(stateDir)
 	if err == nil {
-		glog.Errorf("Container %s exists", container)
+		logrus.Errorf("Container %s exists\n", container)
 		return nil, fmt.Errorf("Container %s exists", container)
 	}
 	err = os.MkdirAll(stateDir, 0644)
 	if err != nil {
-		glog.V(1).Infof("%s", err.Error())
+		logrus.Infof("%s\n", err.Error())
 		return nil, err
 	}
 	defer func() {
@@ -136,14 +136,15 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 		},
 		ShimCreateTime: stat.StartTime,
 	}
-	glog.V(3).Infof("save state id %s, boundle %s", container, bundle)
+	logrus.Debugf("save state id %s, boundle %s", container, bundle)
 	if err = saveStateFile(stateRoot, container, state); err != nil {
 		return nil, err
 	}
 
 	err = execPrestartHooks(spec, state)
 	if err != nil {
-		glog.V(1).Infof("execute Prestart hooks failed, %s", err.Error())
+		// cli refator todo stop container
+		logrus.Infof("execute Prestart hooks failed, %s\n", err.Error())
 		return nil, err
 	}
 
@@ -152,7 +153,8 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 	// Create the listener process which will enters into the netns of the shim
 	options.withContainer = state
 	if err = startNsListener(options, vm); err != nil {
-		glog.Errorf("start ns listener fail: %v", err)
+		// cli refator todo stop container
+		logrus.Errorf("start ns listener fail: %v", err)
 		return nil, err
 	}
 
@@ -198,7 +200,7 @@ func deleteContainer(vm *hypervisor.Vm, root, container string, force bool, spec
 	vm.RemoveContainer(container)
 	err := execPoststopHooks(spec, state)
 	if err != nil {
-		glog.V(1).Infof("execute Poststop hooks failed %s", err.Error())
+		logrus.Infof("execute Poststop hooks failed %s\n", err.Error())
 		removeContainerFs(vm, container)
 		os.RemoveAll(filepath.Join(root, container))
 		return err // return err of the hooks
@@ -232,7 +234,7 @@ func addProcess(options runvOptions, vm *hypervisor.Vm, container, process strin
 	err = vm.AddProcess(p, nil)
 
 	if err != nil {
-		glog.V(1).Infof("add process to container failed: %v", err)
+		logrus.Infof("add process to container failed: %v\n", err)
 		return nil, err
 	}
 	defer func() {
@@ -306,7 +308,7 @@ func execPoststartHooks(rt *specs.Spec, state *State) error {
 	for _, hook := range rt.Hooks.Poststart {
 		err := execHook(hook, state)
 		if err != nil {
-			glog.V(1).Infof("exec Poststart hook %s failed %s", hook.Path, err.Error())
+			logrus.Infof("exec Poststart hook %s failed %s", hook.Path, err.Error())
 		}
 	}
 
@@ -320,7 +322,7 @@ func execPoststopHooks(rt *specs.Spec, state *State) error {
 	for _, hook := range rt.Hooks.Poststop {
 		err := execHook(hook, state)
 		if err != nil {
-			glog.V(1).Infof("exec Poststop hook %s failed %s", hook.Path, err.Error())
+			logrus.Infof("exec Poststop hook %s failed %s", hook.Path, err.Error())
 		}
 	}
 

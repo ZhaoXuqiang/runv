@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 )
 
@@ -51,17 +51,17 @@ func CreateTemplateVM(statePath, vmName string, b hypervisor.BootConfig) (t *Tem
 
 	// prepare statePath
 	if err := os.MkdirAll(statePath, 0700); err != nil {
-		glog.Infof("create template state path failed: %v", err)
+		logrus.Infof("create template state path failed: %v", err)
 		return nil, err
 	}
 	flags := uintptr(syscall.MS_NOSUID | syscall.MS_NODEV)
 	opts := fmt.Sprintf("size=%dM", b.Memory+8)
 	if err = syscall.Mount("tmpfs", statePath, "tmpfs", flags, opts); err != nil {
-		glog.Infof("mount template state path failed: %v", err)
+		logrus.Infof("mount template state path failed: %v", err)
 		return nil, err
 	}
 	if f, err := os.Create(statePath + "/memory"); err != nil {
-		glog.Infof("create memory path failed: %v", err)
+		logrus.Infof("create memory path failed: %v", err)
 		return nil, err
 	} else {
 		f.Close()
@@ -77,11 +77,11 @@ func CreateTemplateVM(statePath, vmName string, b hypervisor.BootConfig) (t *Tem
 
 	// pasue and save devices state
 	if err = vm.Pause(true); err != nil {
-		glog.Infof("failed to pause template vm:%v", err)
+		logrus.Infof("failed to pause template vm:%v", err)
 		return nil, err
 	}
 	if err = vm.Save(statePath + "/state"); err != nil {
-		glog.Infof("failed to save template vm states: %v", err)
+		logrus.Infof("failed to save template vm states: %v", err)
 		return nil, err
 	}
 
@@ -91,13 +91,13 @@ func CreateTemplateVM(statePath, vmName string, b hypervisor.BootConfig) (t *Tem
 
 	configData, err := json.MarshalIndent(config, "", "\t")
 	if err != nil {
-		glog.V(1).Infof("%s\n", err.Error())
+		logrus.Infof("%s\n", err.Error())
 		return nil, err
 	}
 	configFile := filepath.Join(statePath, "config.json")
 	err = ioutil.WriteFile(configFile, configData, 0644)
 	if err != nil {
-		glog.V(1).Infof("%s\n", err.Error())
+		logrus.Infof("%s\n", err.Error())
 		return nil, err
 	}
 
@@ -118,7 +118,7 @@ func (t *TemplateVmConfig) Destroy() {
 	for i := 0; i < 5; i++ {
 		err := syscall.Unmount(t.StatePath, 0)
 		if err != nil {
-			glog.Infof("Failed to unmount the template state path: %v", err)
+			logrus.Infof("Failed to unmount the template state path: %v", err)
 		} else {
 			break
 		}
@@ -126,6 +126,6 @@ func (t *TemplateVmConfig) Destroy() {
 	}
 	err := os.Remove(t.StatePath)
 	if err != nil {
-		glog.Infof("Failed to remove the template state path: %v", err)
+		logrus.Infof("Failed to remove the template state path: %v", err)
 	}
 }

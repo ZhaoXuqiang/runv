@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/factory/base"
 	"github.com/hyperhq/runv/factory/cache"
 	"github.com/hyperhq/runv/factory/direct"
@@ -61,7 +61,7 @@ func NewFromPolicy(bootConfig hypervisor.BootConfig, policy string) Factory {
 	jsonString := "[" + policy + "]"
 	err := json.Unmarshal([]byte(jsonString), &configs)
 	if err != nil && policy != "none" {
-		glog.Errorf("Incorrect policy: %s", policy)
+		logrus.Errorf("Incorrect policy: %s", policy)
 	}
 	return NewFromConfigs(bootConfig, configs)
 }

@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	"fmt"
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/hypervisor/types"
 	libvirtgo "github.com/rgbkrk/libvirt-go"
@@ -112,7 +112,7 @@ func getCPUStats(domain *libvirtgo.VirDomain) (types.CpuStats, error) {
 	for _, stat := range perCPUStats {
 		stats.Usage.PerCpu = append(stats.Usage.PerCpu, stat.Value.(uint64))
 	}
-	glog.V(4).Infof("Get per-cpu stats: %v", perCPUStats)
+	logrus.Debugf("Get per-cpu stats: %v", perCPUStats)
 
 	// Query total stats
 	var cpuStats libvirtgo.VirTypedParameters
@@ -134,7 +134,7 @@ func getCPUStats(domain *libvirtgo.VirDomain) (types.CpuStats, error) {
 			stats.Usage.System = stat.Value.(uint64)
 		}
 	}
-	glog.V(4).Infof("Get total cpu stats: %v", cpuStats)
+	logrus.Debugf("Get total cpu stats: %v", cpuStats)
 
 	return stats, nil
 }
@@ -259,14 +259,14 @@ func (lc *LibvirtContext) Stats(ctx *hypervisor.VmContext) (*types.PodStats, err
 	if err != nil {
 		return nil, err
 	}
-	glog.V(4).Infof("XML description for domain is %s", xmlDesc)
+	logrus.Debugf("XML description for domain is %s", xmlDesc)
 
 	var virDomain VirDomain
 	err = xml.Unmarshal([]byte(xmlDesc), &virDomain)
 	if err != nil {
 		return nil, err
 	}
-	glog.V(4).Infof("Get domain description: %v", virDomain)
+	logrus.Debugf("Get domain description: %v", virDomain)
 
 	cpuStats, err := getCPUStats(lc.domain)
 	if err != nil {

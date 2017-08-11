@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 )
 
@@ -52,7 +52,7 @@ func (qc *QemuContext) arguments(ctx *hypervisor.VmContext) []string {
 			})
 			if len(infos) == 3 && infos[0] == "CPU" && infos[1] == "part" {
 				if partnum, err := strconv.ParseInt(infos[2], 0, 32); err == nil {
-					glog.Infof("partnum is %v, cpu type is thunder", partnum)
+					logrus.Infof("partnum is %v, cpu type is thunder", partnum)
 					if partnum == CAVIUM_CPU_PART_THUNDERX || partnum == CAVIUM_CPU_PART_THUNDERX_81XX {
 						gic_version3 = true
 					}
@@ -65,7 +65,7 @@ func (qc *QemuContext) arguments(ctx *hypervisor.VmContext) []string {
 	kvm_available := true
 	if _, err := os.Stat("/dev/kvm"); os.IsNotExist(err) {
 		kvm_available = false
-		glog.V(1).Info("kvm not exist change to no kvm mode")
+		logrus.Info("kvm not exist change to no kvm mode")
 	}
 
 	params := []string{"-machine", "virt,usb=off", "-cpu", "cortex-a57"}

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 )
 
@@ -35,7 +35,7 @@ func (qc *QemuContext) arguments(ctx *hypervisor.VmContext) []string {
 	params := []string{
 		"-machine", machineClass, "-enable-kvm", "-cpu", "host"}
 	if _, err := os.Stat("/dev/kvm"); os.IsNotExist(err) {
-		glog.V(3).Info("kvm not exist change to no kvm mode")
+		logrus.Info("kvm not exist change to no kvm mode")
 		params = []string{"-machine", machineClass + ",usb=off", "-cpu", "core2duo"}
 		cmdline += " clocksource=acpi_pm notsc"
 	}
@@ -45,7 +45,7 @@ func (qc *QemuContext) arguments(ctx *hypervisor.VmContext) []string {
 			"-drive", fmt.Sprintf("if=pflash,file=%s,readonly=on,id=qboot_rom", boot.Bios),
 			"-drive", fmt.Sprintf("if=pflash,file=%s,readonly=on,append-offset=4152,id=kernel_rom", boot.Cbfs),
 			"-append", fmt.Sprintf("console=ttyS0 panic=1 quiet no_timer_check nr_cpus=%d", ctx.Boot.CPU))
-		glog.V(3).Infof("Boot qemu with bios and cbfs file: %q and %q", boot.Bios, boot.Cbfs)
+		logrus.Infof("Boot qemu with bios and cbfs file: %q and %q", boot.Bios, boot.Cbfs)
 	} else if boot.Bios != "" {
 		params = append(params,
 			"-bios", boot.Bios,

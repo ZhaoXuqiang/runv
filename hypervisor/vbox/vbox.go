@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/hyperhq/runv/hypervisor/network"
 	"github.com/hyperhq/runv/hypervisor/types"
@@ -94,7 +94,7 @@ func (vc *VBoxContext) Launch(ctx *hypervisor.VmContext) {
 		os.MkdirAll(vmRootPath, 0755)
 		err = vc.CreateVm(ctx.Id, vmRootPath, ctx.HyperSockName, ctx.TtySockName)
 		if err != nil {
-			glog.Errorf(err.Error())
+			logrus.Errorf(err.Error())
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to create a VM(" + ctx.Id + "), since " + err.Error()}
 			return
 		}
@@ -118,7 +118,7 @@ func (vc *VBoxContext) Launch(ctx *hypervisor.VmContext) {
 		for i := 1; i <= ctx.InterfaceCount; i++ {
 			err = vc.Machine.SetNIC(i, nic)
 			if err != nil {
-				glog.Errorf(err.Error())
+				logrus.Errorf(err.Error())
 				ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to create a VM(" + ctx.Id + "), since " + err.Error()}
 				return
 			}
@@ -136,19 +136,19 @@ func (vc *VBoxContext) Launch(ctx *hypervisor.VmContext) {
 			Medium:    ctx.Boot.Vbox,
 		}
 		if err := m.AddStorageCtl(m.Name, boot); err != nil {
-			glog.Errorf(err.Error())
+			logrus.Errorf(err.Error())
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to create a VM(" + m.Name + ") with boot device, since " + err.Error()}
 			return
 		}
 		if err := m.AttachStorage(m.Name, medium); err != nil {
-			glog.Errorf(err.Error())
+			logrus.Errorf(err.Error())
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to create a VM(" + m.Name + ") with boot device, since " + err.Error()}
 			return
 		}
 
 		// 3.5. Create shared dir between host and guest
 		if err := vc.AddDir(hypervisor.ShareDirTag, ctx.ShareDir, false); err != nil {
-			glog.Errorf(err.Error())
+			logrus.Errorf(err.Error())
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to start a VM(" + m.Name + "), since " + err.Error()}
 			return
 		}
@@ -156,7 +156,7 @@ func (vc *VBoxContext) Launch(ctx *hypervisor.VmContext) {
 	vc.Machine = m
 	// 4. Start a VM
 	if err := m.Start(); err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to start a VM(" + m.Name + "), since " + err.Error()}
 		return
 	}
@@ -181,7 +181,7 @@ func (vc *VBoxContext) Dump() (map[string]interface{}, error) {
 
 func (vc *VBoxContext) Pause(ctx *hypervisor.VmContext, pause bool) error {
 	err := fmt.Errorf("doesn't support pause for vbox right now")
-	glog.Warning(err)
+	logrus.Warn(err)
 	return err
 }
 
@@ -196,10 +196,10 @@ func (vc *VBoxContext) Shutdown(ctx *hypervisor.VmContext) {
 		m.Poweroff()
 		time.Sleep(1 * time.Second)
 		if err := vc.detachDisk(name, 0); err != nil {
-			glog.Warningf("failed to detach the disk of VBox(%s), %s", name, err.Error())
+			logrus.Warnf("failed to detach the disk of VBox(%s), %s", name, err.Error())
 		}
 		if err := m.Delete(); err != nil {
-			glog.Warningf("failed to delete the VBox(%s), %s", name, err.Error())
+			logrus.Warnf("failed to delete the VBox(%s), %s", name, err.Error())
 		}
 		os.RemoveAll(filepath.Join(hypervisor.BaseDir, "vm", name))
 
@@ -218,10 +218,10 @@ func (vc *VBoxContext) Kill(ctx *hypervisor.VmContext) {
 		name := m.Name
 		m.Poweroff()
 		if err := vc.detachDisk(m.Name, 0); err != nil {
-			glog.Warningf("failed to detach the disk of VBox(%s), %s", name, err.Error())
+			logrus.Warnf("failed to detach the disk of VBox(%s), %s", name, err.Error())
 		}
 		if err := m.Delete(); err != nil {
-			glog.Warningf("failed to delete the VBox(%s), %s", name, err.Error())
+			logrus.Warnf("failed to delete the VBox(%s), %s", name, err.Error())
 		}
 		delete(vc.Driver.Machines, name)
 		args := fmt.Sprintf("ps aux | grep %s | grep -v grep | awk '{print \"kill -9 \" $2}' | sh", name)
@@ -250,7 +250,7 @@ func (vc *VBoxContext) AddDisk(ctx *hypervisor.VmContext, sourceType string, blo
 	//	go func() {
 	/*
 		if sourceType != "vdi" {
-			glog.Infof("Disk %s (%s) add failed, unsupported source type", name, filename)
+			logrus.Infof("Disk %s (%s) add failed, unsupported source type", name, filename)
 			result <- &hypervisor.DeviceFailed{
 				Session: nil,
 			}
@@ -271,7 +271,7 @@ func (vc *VBoxContext) AddDisk(ctx *hypervisor.VmContext, sourceType string, blo
 		SSD:       false,
 	}
 	if err := m.AttachStorage(m.Name, medium); err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		result <- &hypervisor.DeviceFailed{
 			Session: nil,
 		}
@@ -282,7 +282,7 @@ func (vc *VBoxContext) AddDisk(ctx *hypervisor.VmContext, sourceType string, blo
 		DeviceName: devName,
 	}
 
-	glog.V(1).Infof("Disk %s (%s) add succeeded", name, filename)
+	logrus.Infof("Disk %s (%s) add succeeded", name, filename)
 	result <- callback
 	return
 	//	}()
@@ -298,7 +298,7 @@ func (vc *VBoxContext) RemoveDisk(ctx *hypervisor.VmContext, blockInfo *hypervis
 		return
 	}
 	if err := vc.detachDisk(m.Name, id); err != nil {
-		glog.Warningf("failed to detach the disk of VBox(%s), %s", m.Name, err.Error())
+		logrus.Warnf("failed to detach the disk of VBox(%s), %s", m.Name, err.Error())
 		/*
 			result <- &hypervisor.DeviceFailed{
 				Session: callback,
@@ -306,7 +306,7 @@ func (vc *VBoxContext) RemoveDisk(ctx *hypervisor.VmContext, blockInfo *hypervis
 		*/
 	}
 
-	glog.V(1).Infof("Disk %s remove succeeded", filename)
+	logrus.Infof("Disk %s remove succeeded", filename)
 	result <- callback
 	return
 	//	}()
@@ -322,7 +322,7 @@ func (vc *VBoxContext) AddDir(name, path string, readonly bool) error {
 		Readonly:  readonly,
 	}
 	if err := vc.Machine.AddSharedFolder(vc.Machine.Name, sFolder); err != nil {
-		glog.Warningf("The shared folder is failed to add, since %s", err.Error())
+		logrus.Warnf("The shared folder is failed to add, since %s", err.Error())
 		return err
 	}
 	return nil
@@ -330,7 +330,7 @@ func (vc *VBoxContext) AddDir(name, path string, readonly bool) error {
 
 func (vc *VBoxContext) RemoveDir(name string) error {
 	if err := vc.Machine.RemoveSharedFolder(vc.Machine.Name, name); err != nil {
-		glog.Warningf("The shared folder is failed to remove, since %s", err.Error())
+		logrus.Warnf("The shared folder is failed to remove, since %s", err.Error())
 		return err
 	}
 	return nil
@@ -345,21 +345,21 @@ func (vc *VBoxContext) AddNic(ctx *hypervisor.VmContext, host *hypervisor.HostNi
 			Address:    guest.Busaddr,
 		}
 		if guest.Index > 7 || guest.Index < 0 {
-			glog.Errorf("Hot adding NIC failed, can not add more than 8 NICs")
+			logrus.Errorf("Hot adding NIC failed, can not add more than 8 NICs")
 			result <- &hypervisor.DeviceFailed{
 				Session: callback,
 			}
 		}
 		/*
 			if err := vc.Machine.ModifyNIC(guest.Index+1, virtualbox.NICNetNAT, ""); err != nil {
-				glog.Errorf("Hot adding NIC failed, %s", err.Error())
+				logrus.Errorf("Hot adding NIC failed, %s", err.Error())
 				ctx.Hub <- &hypervisor.DeviceFailed{
 					Session: callback,
 				}
 				return
 			}
 		*/
-		glog.V(1).Infof("nic %s insert succeeded", guest.Device)
+		logrus.Infof("nic %s insert succeeded", guest.Device)
 		result <- callback
 		return
 	}()
@@ -370,14 +370,14 @@ func (vc *VBoxContext) RemoveNic(ctx *hypervisor.VmContext, n *hypervisor.Interf
 		/*
 			args := "vboxmanage controlvm " + vc.Machine.Name + " nic1 null"
 			if err := exec.Command("/bin/sh", "-c", args).Run(); err != nil {
-				glog.Errorf(err.Error())
+				logrus.Errorf(err.Error())
 				ctx.Hub <- &hypervisor.DeviceFailed{
 					Session: callback,
 				}
 				return
 			}
 		*/
-		glog.V(1).Infof("nic %s remove succeeded", n.DeviceName)
+		logrus.Infof("nic %s remove succeeded", n.DeviceName)
 		result <- callback
 		return
 	}()
@@ -401,7 +401,7 @@ func (vc *VBoxContext) Save(ctx *hypervisor.VmContext, path string) error {
 func (vc *VBoxContext) CreateVm(name, baseDir, hyperSockFile, ttySockFile string) error {
 	machine, err := virtualbox.CreateMachine(name, baseDir)
 	if err != nil {
-		glog.Errorf(name + " " + err.Error())
+		logrus.Errorf(name + " " + err.Error())
 		return err
 	}
 	vc.Machine = machine
@@ -411,12 +411,12 @@ func (vc *VBoxContext) CreateVm(name, baseDir, hyperSockFile, ttySockFile string
 	// Serial Port 2 is between 0x02F8 to 0x02FF
 	err = machine.CreateSerialPort(hyperSockFile, "1", "0x03F8", "4", virtualbox.HOST_MODE_PIPE, true)
 	if err != nil {
-		glog.Errorf(name + " " + err.Error())
+		logrus.Errorf(name + " " + err.Error())
 		return err
 	}
 	err = machine.CreateSerialPort(ttySockFile, "2", "0x02F8", "3", virtualbox.HOST_MODE_PIPE, true)
 	if err != nil {
-		glog.Errorf(name + " " + err.Error())
+		logrus.Errorf(name + " " + err.Error())
 		return err
 	}
 	return nil
@@ -483,7 +483,7 @@ func (vc *VBoxContext) InitVM(ctx *hypervisor.VmContext) error {
 			m, err = virtualbox.CreateMachine(ctx.Id, vmRootPath)
 		}
 		if err != nil {
-			glog.Errorf(ctx.Id + " " + err.Error())
+			logrus.Errorf(ctx.Id + " " + err.Error())
 			return err
 		}
 	}
@@ -527,7 +527,7 @@ func (vc *VBoxContext) LazyLaunch(ctx *hypervisor.VmContext) {
 
 	defer func() {
 		if err != nil {
-			glog.Errorf("fail to start %s, should I delete it?", ctx.Id)
+			logrus.Errorf("fail to start %s, should I delete it?", ctx.Id)
 		}
 	}()
 
@@ -547,18 +547,18 @@ func (vc *VBoxContext) LazyLaunch(ctx *hypervisor.VmContext) {
 		SSD:       false,
 	}
 	if err = m.AddStorageCtl(m.Name, boot); err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to create a VM(" + m.Name + ") with boot device, since " + err.Error()}
 		return
 	}
 	if err = m.AttachStorage(m.Name, medium); err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to create a VM(" + m.Name + ") with boot device, since " + err.Error()}
 		return
 	}
 	for _, disk := range vc.mediums {
 		if err = m.AttachStorage(m.Name, *disk); err != nil {
-			glog.Errorf(err.Error())
+			logrus.Errorf(err.Error())
 			ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to create a VM(" + m.Name + ") with boot device, since " + err.Error()}
 			return
 		}
@@ -566,14 +566,14 @@ func (vc *VBoxContext) LazyLaunch(ctx *hypervisor.VmContext) {
 
 	// 3.5. Create shared dir between host and guest
 	if err := vc.AddDir(hypervisor.ShareDirTag, ctx.ShareDir, false); err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to start a VM(" + m.Name + "), since " + err.Error()}
 		return
 	}
 
 	// 4. Start a VM
 	if err := vc.Machine.Start(); err != nil {
-		glog.Errorf(err.Error())
+		logrus.Errorf(err.Error())
 		ctx.Hub <- &hypervisor.VmStartFailEvent{Message: "failed to start a VM(" + m.Name + "), since " + err.Error()}
 		return
 	}

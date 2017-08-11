@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/reexec"
-	"github.com/golang/glog"
 	"github.com/hyperhq/runv/driverloader"
 	"github.com/hyperhq/runv/hypervisor"
 	"github.com/urfave/cli"
@@ -73,6 +73,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "log-format",
+			Value: "text",
 			Usage: "[ignored on runv] set the format used by logs ('text' (default), or 'json')",
 		},
 		cli.StringFlag{
@@ -119,9 +120,29 @@ func main() {
 			Usage: "runv-compatible boot ISO for the container for vbox driver",
 		},
 	}
+	app.Before = func(context *cli.Context) error {
+		if context.GlobalBool("debug") {
+			logrus.SetLevel(logrus.DebugLevel)
+		}
+		if path := context.GlobalString("log"); path != "" {
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
+			if err != nil {
+				return err
+			}
+			logrus.SetOutput(f)
+		}
+		switch context.GlobalString("log-format") {
+		case "text":
+			// retain logrus's default.
+		case "json":
+			logrus.SetFormatter(new(logrus.JSONFormatter))
+		default:
+			return fmt.Errorf("unknown log-format %q", context.GlobalString("log-format"))
+		}
+		return nil
+	}
 	app.After = func(context *cli.Context) error {
 		// make sure glog flush all the messages to file
-		glog.Flush()
 		return nil
 	}
 
@@ -144,7 +165,7 @@ func main() {
 		nsListenCommand,
 	}
 	if err := app.Run(os.Args); err != nil {
-		glog.Errorf("app.Run(os.Args) failed with err: %#v", err)
+		logrus.Errorf("app.Run(os.Args) failed with err: %#v", err)
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/hypervisor"
 	templatecore "github.com/hyperhq/runv/template"
 	"github.com/urfave/cli"
@@ -94,7 +94,7 @@ var removeTemplateCommand = cli.Command{
 	Action: func(context *cli.Context) error {
 		if err := syscall.Unmount(context.GlobalString("template"), 0); err != nil {
 			err := fmt.Errorf("Failed to remove the template: %v", err)
-			glog.Error(err)
+			logrus.Error(err)
 			return cli.NewExitError(err.Error(), -1)
 		}
 		return nil

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/api"
 	_ "github.com/hyperhq/runv/cli/nsenter"
 	"github.com/hyperhq/runv/hypervisor"
@@ -59,7 +59,7 @@ func GetBridgeFromIndex(idx int) (string, string, error) {
 
 	links, err := netlink.LinkList()
 	if err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return "", "", err
 	}
 
@@ -112,7 +112,7 @@ func GetBridgeFromIndex(idx int) (string, string, error) {
 		options = "tag=" + strings.TrimSpace(string(out))
 	}
 
-	glog.V(3).Infof("find bridge %s", bridge.Name)
+	logrus.Debugf("find bridge %s", bridge.Name)
 
 	return bridge.Name, options, nil
 }
@@ -120,7 +120,7 @@ func GetBridgeFromIndex(idx int) (string, string, error) {
 func initSandboxNetwork(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) error {
 	/* send collect netns request to nsListener */
 	if err := enc.Encode("init"); err != nil {
-		glog.Errorf("listener.dec.Decode init error: %v", err)
+		logrus.Errorf("listener.dec.Decode init error: %v", err)
 		return err
 	}
 
@@ -128,14 +128,14 @@ func initSandboxNetwork(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) e
 	/* read nic information of ns from pipe */
 	err := dec.Decode(&infos)
 	if err != nil {
-		glog.Error("listener.dec.Decode infos error: %v", err)
+		logrus.Error("listener.dec.Decode infos error: %v", err)
 		return err
 	}
 
 	routes := []netlink.Route{}
 	err = dec.Decode(&routes)
 	if err != nil {
-		glog.Error("listener.dec.Decode route error: %v", err)
+		logrus.Error("listener.dec.Decode route error: %v", err)
 		return err
 	}
 
@@ -146,11 +146,11 @@ func initSandboxNetwork(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) e
 		}
 	}
 
-	glog.V(3).Infof("interface configuration for sandbox ns is %#v", infos)
+	logrus.Debugf("interface configuration for sandbox ns is %#v", infos)
 	for _, info := range infos {
 		bridge, options, err := GetBridgeFromIndex(info.PeerIndex)
 		if err != nil {
-			glog.Error(err)
+			logrus.Error(err)
 			continue
 		}
 
@@ -174,14 +174,14 @@ func initSandboxNetwork(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) e
 		//err = hp.vm.AddNic(info.Index, fmt.Sprintf("eth%d", idx), conf)
 		err = vm.AddNic(conf)
 		if err != nil {
-			glog.Error(err)
+			logrus.Error(err)
 			return err
 		}
 	}
 
 	err = vm.AddRoute()
 	if err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return err
 	}
 
@@ -199,31 +199,31 @@ func nsListenerStrap(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) {
 		err := dec.Decode(&update)
 		if err != nil {
 			if err == io.EOF {
-				glog.V(3).Infof("listener.dec.Decode NetlinkUpdate: %v", err)
+				logrus.Debugf("listener.dec.Decode NetlinkUpdate: %v", err)
 				break
 			}
-			glog.Error("listener.dec.Decode NetlinkUpdate error: %v", err)
+			logrus.Error("listener.dec.Decode NetlinkUpdate error: %v", err)
 			continue
 		}
 
-		glog.V(3).Infof("network namespace information of %s has been changed", update.UpdateType)
+		logrus.Debugf("network namespace information of %s has been changed", update.UpdateType)
 		switch update.UpdateType {
 		case UpdateTypeLink:
 			link := update.Veth
 			if link.Attrs().ParentIndex == 0 {
-				glog.V(3).Infof("The deleted link: %s", link)
+				logrus.Debugf("The deleted link: %s", link)
 				err = vm.DeleteNic(strconv.Itoa(link.Attrs().Index))
 				if err != nil {
-					glog.Error(err)
+					logrus.Error(err)
 					continue
 				}
 
 			} else {
-				glog.V(3).Infof("The changed link: %s", link)
+				logrus.Debugf("The changed link: %s", link)
 			}
 
 		case UpdateTypeAddr:
-			glog.V(3).Infof("The changed address: %s", update.Addr)
+			logrus.Debugf("The changed address: %s", update.Addr)
 
 			link := update.Veth
 
@@ -231,7 +231,7 @@ func nsListenerStrap(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) {
 			// the address change event which the link will be NIL since it has
 			// already been deleted before the address change event be triggered.
 			if link == nil {
-				glog.V(3).Info("Link for this address has already been deleted.")
+				logrus.Debug("Link for this address has already been deleted.")
 				continue
 			}
 
@@ -239,13 +239,13 @@ func nsListenerStrap(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) {
 			//
 			// The link should be the one which the address on it has been changed.
 			if link.Attrs().Index != update.Addr.LinkIndex {
-				glog.Errorf("Get the wrong link with ID %d, expect %d", link.Attrs().Index, update.Addr.LinkIndex)
+				logrus.Errorf("Get the wrong link with ID %d, expect %d", link.Attrs().Index, update.Addr.LinkIndex)
 				continue
 			}
 
 			bridge, options, err := GetBridgeFromIndex(link.Attrs().ParentIndex)
 			if err != nil {
-				glog.Error(err)
+				logrus.Error(err)
 				continue
 			}
 
@@ -259,7 +259,7 @@ func nsListenerStrap(vm *hypervisor.Vm, enc *gob.Encoder, dec *gob.Decoder) {
 
 			err = vm.AddNic(inf)
 			if err != nil {
-				glog.Error(err)
+				logrus.Error(err)
 				continue
 			}
 
@@ -283,14 +283,14 @@ func startNsListener(options runvOptions, vm *hypervisor.Vm) (err error) {
 
 	path, err = osext.Executable()
 	if err != nil {
-		glog.Errorf("cannot find self executable path for %s: %v", os.Args[0], err)
+		logrus.Errorf("cannot find self executable path for %s: %v", os.Args[0], err)
 		return err
 	}
 
-	glog.V(3).Infof("get exec path %s", path)
+	logrus.Debugf("get exec path %s", path)
 	parentPipe, childPipe, err = newPipe()
 	if err != nil {
-		glog.Errorf("create pipe for network-nslisten failed: %v", err)
+		logrus.Errorf("create pipe for network-nslisten failed: %v", err)
 		return err
 	}
 
@@ -308,7 +308,7 @@ func startNsListener(options runvOptions, vm *hypervisor.Vm) (err error) {
 		ExtraFiles: []*os.File{childPipe},
 	}
 	if err = cmd.Start(); err != nil {
-		glog.Errorf("start network-nslisten failed: %v", err)
+		logrus.Errorf("start network-nslisten failed: %v", err)
 		return err
 	}
 
@@ -327,7 +327,7 @@ func startNsListener(options runvOptions, vm *hypervisor.Vm) (err error) {
 	/* Make sure nsListener create new netns */
 	var ready string
 	if err = dec.Decode(&ready); err != nil {
-		glog.Errorf("Get ready message from network-nslisten failed: %v", err)
+		logrus.Errorf("Get ready message from network-nslisten failed: %v", err)
 		return err
 	}
 
@@ -337,7 +337,7 @@ func startNsListener(options runvOptions, vm *hypervisor.Vm) (err error) {
 	}
 
 	initSandboxNetwork(vm, enc, dec)
-	glog.V(1).Infof("nsListener pid is %d", cmd.Process.Pid)
+	logrus.Infof("nsListener pid is %d", cmd.Process.Pid)
 	return nil
 }
 
@@ -362,19 +362,19 @@ func doListen() {
 
 	/* notify `runv create` to execute prestart hooks */
 	if err := enc.Encode("init"); err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return
 	}
 
 	/* after execute prestart hooks */
 	var ready string
 	if err := dec.Decode(&ready); err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return
 	}
 
 	if ready != "init" {
-		glog.Errorf("get incorrect init message: %s", ready)
+		logrus.Errorf("get incorrect init message: %s", ready)
 		return
 	}
 
@@ -382,19 +382,19 @@ func doListen() {
 	/* get route info before link down */
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
 	if err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return
 	}
 
 	/* send interface info to `runv create` */
 	infos := collectionInterfaceInfo()
 	if err := enc.Encode(infos); err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return
 	}
 
 	if err := enc.Encode(routes); err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return
 	}
 
@@ -402,7 +402,7 @@ func doListen() {
 	// Use to send netlink update informations to `runv create`.
 	//netNs2Containerd := func(netlinkUpdate NetlinkUpdate) {
 	//	if err := enc.Encode(netlinkUpdate); err != nil {
-	//		glog.Info("err Encode(netlinkUpdate) is :", err)
+	//		logrus.Info("err Encode(netlinkUpdate) is :", err)
 	//	}
 	//}
 	// todo: Keep collecting network namespace info and sending to the runv
@@ -414,7 +414,7 @@ func collectionInterfaceInfo() []InterfaceInfo {
 
 	links, err := netlink.LinkList()
 	if err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 		return infos
 	}
 
@@ -426,7 +426,7 @@ func collectionInterfaceInfo() []InterfaceInfo {
 
 		addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
 		if err != nil {
-			glog.Error(err)
+			logrus.Error(err)
 			return infos
 		}
 
@@ -436,7 +436,7 @@ func collectionInterfaceInfo() []InterfaceInfo {
 				Index:     link.Attrs().Index,
 				PeerIndex: link.Attrs().ParentIndex,
 			}
-			glog.Infof("get interface %v", info)
+			logrus.Infof("get interface %v", info)
 			infos = append(infos, info)
 		}
 
@@ -454,7 +454,7 @@ func setupNetworkNsTrap(netNs2Containerd func(NetlinkUpdate)) {
 	doneLink := make(chan struct{})
 	defer close(doneLink)
 	if err := netlink.LinkSubscribe(chLink, doneLink); err != nil {
-		glog.Fatal(err)
+		logrus.Fatal(err)
 	}
 
 	// Subscribe for addresses change event
@@ -462,7 +462,7 @@ func setupNetworkNsTrap(netNs2Containerd func(NetlinkUpdate)) {
 	doneAddr := make(chan struct{})
 	defer close(doneAddr)
 	if err := netlink.AddrSubscribe(chAddr, doneAddr); err != nil {
-		glog.Fatal(err)
+		logrus.Fatal(err)
 	}
 
 	// Subscribe for route change event
@@ -470,7 +470,7 @@ func setupNetworkNsTrap(netNs2Containerd func(NetlinkUpdate)) {
 	doneRoute := make(chan struct{})
 	defer close(doneRoute)
 	if err := netlink.RouteSubscribe(chRoute, doneRoute); err != nil {
-		glog.Fatal(err)
+		logrus.Fatal(err)
 	}
 
 	for {
@@ -528,7 +528,7 @@ func handleAddr(update netlink.AddrUpdate, callback func(NetlinkUpdate)) {
 	netlinkUpdate.UpdateType = UpdateTypeAddr
 	links, err := netlink.LinkList()
 	if err != nil {
-		glog.Error(err)
+		logrus.Error(err)
 	}
 	for _, link := range links {
 		if link.Attrs().Index == update.LinkIndex && link.Type() == "veth" {

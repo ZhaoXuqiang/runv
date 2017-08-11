@@ -1,7 +1,7 @@
 package single
 
 import (
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hyperhq/runv/factory/base"
 	"github.com/hyperhq/runv/hypervisor"
 )
@@ -32,18 +32,18 @@ func (f Factory) GetVm(cpu, mem int) (*hypervisor.Vm, error) {
 	var needOnline bool = false
 	if vm.Cpu < cpu {
 		needOnline = true
-		glog.V(3).Info("HotAddCpu for cached Vm")
+		logrus.Debug("HotAddCpu for cached Vm")
 		err = vm.SetCpus(cpu)
-		glog.V(3).Infof("HotAddCpu result %v", err)
+		logrus.Debugf("HotAddCpu result %v", err)
 	}
 	if vm.Mem < mem {
 		needOnline = true
-		glog.V(3).Info("HotAddMem for cached Vm")
+		logrus.Debug("HotAddMem for cached Vm")
 		err = vm.AddMem(mem)
-		glog.V(3).Infof("HotAddMem result %v", err)
+		logrus.Debugf("HotAddMem result %v", err)
 	}
 	if needOnline {
-		glog.V(3).Info("OnlineCpuMem for cached Vm")
+		logrus.Debug("OnlineCpuMem for cached Vm")
 		vm.OnlineCpuMem()
 	}
 	if err != nil {
