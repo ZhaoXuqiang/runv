@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"io/ioutil"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/hyperhq/runv/hypervisor"
@@ -93,22 +95,31 @@ func cmdCreateContainer(context *cli.Context, attach bool) error {
 			sharedContainer = spec.Annotations["ocid/sandbox_name"]
 		}
 	} else {
-		for _, ns := range spec.Linux.Namespaces {
+		for i, ns := range spec.Linux.Namespaces {
 			if ns.Path != "" {
-				if strings.Contains(ns.Path, "/") {
-					return fmt.Errorf("Runv doesn't support path to namespace file, it supports containers name as shared namespaces only")
-				}
 				if ns.Type == "mount" {
 					return fmt.Errorf("Runv doesn't support containers with shared mount namespace, use `runv exec` instead")
 				}
-				sharedContainer = ns.Path
+				if sharedContainer, err = findSharedContainer(context.GlobalString("root"), ns.Path); err != nil {
+					return fmt.Errorf("failed to find shared container: %v", err)
+				}
+
+				cstate, err := getContainer(context, sharedContainer)
+				if err != nil {
+					return fmt.Errorf("can't get state file for container %q: %v", sharedContainer, err)
+				}
+				spec.Linux.Namespaces[i] = specs.LinuxNamespace{
+					Type: ns.Type,
+					Path: fmt.Sprintf("/proc/%d/ns/%s", cstate.InitProcessPid, ns.Type),
+				}
+
 				_, err = os.Stat(filepath.Join(root, sharedContainer, stateJSON))
 				if err != nil {
 					return fmt.Errorf("The container %q is not existing or not ready", sharedContainer)
 				}
-				_, err = os.Stat(filepath.Join(root, sharedContainer, "namespace"))
-				if err != nil {
-					return fmt.Errorf("The container %q is not ready", sharedContainer)
+
+				if err = updateSpec(spec, ocffile); err != nil {
+					return fmt.Errorf("update spec file failed: %v", err)
 				}
 			}
 		}
@@ -158,4 +169,39 @@ func checkConsole(context *cli.Context, p *specs.Process, attach bool) error {
 		return fmt.Errorf("--console[-socket] should be used on tty mode")
 	}
 	return nil
+}
+
+
+func findSharedContainer(root, nsPath string) (container string, err error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	list, err := ioutil.ReadDir(absRoot)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.Contains(nsPath, "/") {
+		pidexp := regexp.MustCompile(`/proc/(\d+)/ns/*`)
+		matches := pidexp.FindStringSubmatch(nsPath)
+		if len(matches) != 2 {
+			return "", fmt.Errorf("malformed ns path: %s", nsPath)
+		}
+		pid := matches[1]
+
+		for _, item := range list {
+			shimPidFile := filepath.Join(absRoot, item.Name(), "shim-init.pid")
+			spidByte, err := ioutil.ReadFile(shimPidFile)
+			if err != nil {
+				return "", fmt.Errorf("failed to read shim pid file %q: %v", shimPidFile, err)
+			}
+			spid := strings.TrimSpace(string(spidByte))
+			if pid == spid {
+				return item.Name(), nil
+			}
+		}
+		return "", fmt.Errorf("can't find container with shim pid %s", pid)
+	}
+	return nsPath, nil
 }
