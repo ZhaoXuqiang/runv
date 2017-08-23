@@ -58,5 +58,4 @@ _testmain.go
 # ignore test_data
 test_data
 !test_data/Makefile
-/tests/go-integration/config.json
-/tests/recvtty/recvtty
+integration-test/config.json

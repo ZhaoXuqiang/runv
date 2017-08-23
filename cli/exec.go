@@ -138,8 +138,10 @@ func getProcess(context *cli.Context, spec *specs.Spec) (*specs.Process, error) 
 	for _, e := range context.StringSlice("env") {
 		p.Env = append(p.Env, e)
 	}
-	// set the tty, always override it
-	p.Terminal = context.Bool("tty")
+	// set the tty
+	if context.IsSet("tty") {
+		p.Terminal = context.Bool("tty")
+	}
 	// override the user, if passed
 	if context.String("user") != "" {
 		u := strings.SplitN(context.String("user"), ":", 2)
@@ -163,7 +165,7 @@ func runProcess(context *cli.Context, container string, cState *State, config *s
 	pid := os.Getpid()
 	process := fmt.Sprintf("p-%x", pid+0xabcdef) // uniq name
 
-	options := runvOptions{Context: context, withContainer: cState, attach: !context.Bool("detach")}
+	options := runvOptions{Context: context, withContainer: cState}
 
 	vm, lockFile, err := getSandbox(filepath.Join(context.GlobalString("root"), container, "sandbox"))
 	if err != nil {

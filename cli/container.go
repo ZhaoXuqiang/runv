@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -23,7 +22,7 @@ import (
 func startContainer(vm *hypervisor.Vm, root, container string, spec *specs.Spec, state *State) error {
 	err := vm.StartContainer(container)
 	if err != nil {
-		glog.V(1).Infof("Start Container fail: fail to start container with err: %#v", err)
+		glog.V(1).Infof("Start Container fail: fail to start container with err: %#v\n", err)
 		return err
 	}
 
@@ -40,23 +39,9 @@ func startContainer(vm *hypervisor.Vm, root, container string, spec *specs.Spec,
 		return err
 	}
 
-	var pl *ProcessList
-	if pl, err = NewProcessList(root, container); err != nil {
-		return err
-	}
-	defer pl.Release()
-
-	// No need to load, container init process must be the first
-	var p []Process
-	cmd := strings.Join(spec.Process.Args, " ")
-	p = append(p, Process{Id: "init", Pid: state.Pid, CMD: cmd, CreateTime: state.ShimCreateTime})
-	if err = pl.Save(p); err != nil {
-		return err
-	}
-
 	err = execPoststartHooks(spec, state)
 	if err != nil {
-		glog.V(1).Infof("execute Poststart hooks failed %s", err.Error())
+		glog.V(1).Infof("execute Poststart hooks failed %s\n", err.Error())
 	}
 
 	return err
@@ -68,7 +53,7 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 	}
 	defer func() {
 		if err != nil {
-			removeContainerFs(sandboxPath(vm), container)
+			removeContainerFs(vm, container)
 		}
 	}()
 
@@ -88,12 +73,12 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 	stateDir := filepath.Join(stateRoot, container)
 	_, err = os.Stat(stateDir)
 	if err == nil {
-		glog.Errorf("Container %s exists", container)
+		glog.Errorf("Container %s exists\n", container)
 		return nil, fmt.Errorf("Container %s exists", container)
 	}
 	err = os.MkdirAll(stateDir, 0644)
 	if err != nil {
-		glog.V(1).Infof("%s", err.Error())
+		glog.V(1).Infof("%s\n", err.Error())
 		return nil, err
 	}
 	defer func() {
@@ -110,7 +95,7 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 	}
 
 	// create shim and save the state
-	shim, err = createShim(options, container, "init", &spec.Process)
+	shim, err = createShim(options, container, "init")
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +128,7 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 
 	err = execPrestartHooks(spec, state)
 	if err != nil {
-		glog.V(1).Infof("execute Prestart hooks failed, %s", err.Error())
+		glog.V(1).Infof("execute Prestart hooks failed, %s\n", err.Error())
 		return nil, err
 	}
 
@@ -160,15 +145,13 @@ func createContainer(options runvOptions, vm *hypervisor.Vm, container, bundle, 
 }
 
 func deleteContainer(vm *hypervisor.Vm, root, container string, force bool, spec *specs.Spec, state *State) error {
+
+	// todo: check the container from vm.ContainerList()
+	// todo: check the process of state.Pid in case it is a new unrelated process
+
 	// non-force killing can only be performed when at least one of the realProcess and shimProcess exited
-	exitedVM := true
-	for _, c := range vm.ContainerList() {
-		if c == container {
-			exitedVM = vm.SignalProcess(container, "init", syscall.Signal(0)) != nil // todo: is this check reliable?
-			break
-		}
-	}
-	exitedHost := !shimProcessAlive(state.Pid, state.ShimCreateTime)
+	exitedVM := vm.SignalProcess(container, "init", syscall.Signal(0)) != nil // todo: is this check reliable?
+	exitedHost := syscall.Kill(state.Pid, syscall.Signal(0)) != nil
 	if !exitedVM && !exitedHost && !force {
 		// don't perform deleting
 		return fmt.Errorf("the container %s is still alive, use -f to force kill it?", container)
@@ -183,32 +166,28 @@ func deleteContainer(vm *hypervisor.Vm, root, container string, force bool, spec
 			}
 		}
 	}
-	vm.RemoveContainer(container)
 
-	return deleteContainerHost(root, container, spec, state)
-}
-
-func deleteContainerHost(root, container string, spec *specs.Spec, state *State) error {
-	if shimProcessAlive(state.Pid, state.ShimCreateTime) { // force kill the shim process in the host
+	if !exitedHost { // force kill the shim process in the host
 		time.Sleep(200 * time.Millisecond) // the shim might be going to exit, wait it
 		for i := 0; i < 100; i++ {
 			syscall.Kill(state.Pid, syscall.SIGKILL)
 			time.Sleep(100 * time.Millisecond)
-			if !shimProcessAlive(state.Pid, state.ShimCreateTime) {
+			if syscall.Kill(state.Pid, syscall.Signal(0)) != nil {
 				break
 			}
 		}
 	}
 
+	vm.RemoveContainer(container)
 	err := execPoststopHooks(spec, state)
 	if err != nil {
-		glog.V(1).Infof("execute Poststop hooks failed %s", err.Error())
-		removeContainerFs(filepath.Join(root, container, "sandbox"), container)
+		glog.V(1).Infof("execute Poststop hooks failed %s\n", err.Error())
+		removeContainerFs(vm, container)
 		os.RemoveAll(filepath.Join(root, container))
 		return err // return err of the hooks
 	}
 
-	removeContainerFs(filepath.Join(root, container, "sandbox"), container)
+	removeContainerFs(vm, container)
 	return os.RemoveAll(filepath.Join(root, container))
 }
 
@@ -236,7 +215,7 @@ func addProcess(options runvOptions, vm *hypervisor.Vm, container, process strin
 	err = vm.AddProcess(p, nil)
 
 	if err != nil {
-		glog.V(1).Infof("add process to container failed: %v", err)
+		glog.V(1).Infof("add process to container failed: %v\n", err)
 		return nil, err
 	}
 	defer func() {
@@ -245,7 +224,7 @@ func addProcess(options runvOptions, vm *hypervisor.Vm, container, process strin
 		}
 	}()
 
-	shim, err = createShim(options, container, process, spec)
+	shim, err = createShim(options, container, process)
 	if err != nil {
 		return nil, err
 	}
@@ -255,22 +234,7 @@ func addProcess(options runvOptions, vm *hypervisor.Vm, container, process strin
 		}
 	}()
 
-	var stat system.Stat_t
-	stat, err = system.Stat(shim.Pid)
-	if err != nil {
-		return nil, err
-	}
-
-	var pl *ProcessList
-	if pl, err = NewProcessList(options.GlobalString("root"), container); err != nil {
-		return nil, err
-	}
-	defer pl.Release()
-	cmd := strings.Join(spec.Args, " ")
-	err = pl.Add(Process{Id: process, Pid: shim.Pid, CMD: cmd, CreateTime: stat.StartTime})
-	if err != nil {
-		return nil, err
-	}
+	// cli refactor todo (for the purpose of 'runv ps` command) save <container, process, shim-pid, spec> to persist file.
 
 	return shim, nil
 }
@@ -329,9 +293,4 @@ func execPoststopHooks(rt *specs.Spec, state *State) error {
 	}
 
 	return nil
-}
-
-func shimProcessAlive(pid int, createTime uint64) bool {
-	stat, err := system.Stat(pid)
-	return err == nil && stat.StartTime == createTime && stat.State != system.Zombie && stat.State != system.Dead
 }

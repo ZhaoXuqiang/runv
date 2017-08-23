@@ -18,10 +18,9 @@ var (
 )
 
 const (
-	specConfig  = "config.json"
-	stateJSON   = "state.json"
-	processJSON = "process.json"
-	usage       = `Open Container Initiative hypervisor-based runtime
+	specConfig = "config.json"
+	stateJSON  = "state.json"
+	usage      = `Open Container Initiative hypervisor-based runtime
 
 runv is a command line client for running applications packaged according to
 the Open Container Format (OCF) and is a compliant implementation of the
@@ -146,9 +145,6 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		glog.Errorf("app.Run(os.Args) failed with err: %#v", err)
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		cli.HandleExitCoder(err)
-		// non-standard errors
-		os.Exit(22)
 	}
 }
 
@@ -156,7 +152,6 @@ func main() {
 type runvOptions struct {
 	*cli.Context
 	withContainer *State
-	attach        bool
 }
 
 func cmdPrepare(context *cli.Context, setupHypervisor, canLogToStderr bool) error {

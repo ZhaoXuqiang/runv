@@ -184,7 +184,7 @@ func setupContainerFs(vm *hypervisor.Vm, bundle, container string, spec *specs.S
 	return nil
 }
 
-func removeContainerFs(sandboxpath, container string) {
-	containerSharedFs := filepath.Join(sandboxpath, hypervisor.ShareDirTag, container)
+func removeContainerFs(vm *hypervisor.Vm, container string) {
+	containerSharedFs := filepath.Join(hypervisor.BaseDir, vm.Id, hypervisor.ShareDirTag, container)
 	utils.Umount(containerSharedFs)
 }
